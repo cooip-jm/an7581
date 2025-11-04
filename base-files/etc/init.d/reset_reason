@@ -1,0 +1,37 @@
+#!/bin/sh /etc/rc.common
+
+START=20
+STOP=01
+
+shutdown() {
+	true
+}
+
+reset_status() {
+	local status=$(cat /sys/kernel/bootr/boot_reason)
+
+	case $status in
+		RST)
+			echo "REBOOT"
+			;;
+		*)
+			echo "${status}_RESET"
+			;;
+	esac
+}
+
+boot() {
+	# Check reset reason
+	echo "reset reason: $(reset_status)" | tee /dev/console | tee /var/reset_reason
+
+	if [ ! -f /etc/first_boot_completed ]; then
+		if [ -f /var/defaultreset ]; then
+			echo "- default reset completed -" | tee /dev/console
+			echo "reset triggered: defaultreset" >> /var/reset_reason
+		else
+			echo "- system upgraded -" | tee /dev/console
+			echo "reset triggered: upgrade" >> /var/reset_reason
+		fi
+		touch /etc/first_boot_completed
+	fi
+}

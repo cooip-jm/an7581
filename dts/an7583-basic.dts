@@ -1,0 +1,22 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/input/input.h>
+
+/dts-v1/;
+
+#include "an7583-base.dtsi"
+
+/ {
+	model = "AN75xx GENERIC";
+	compatible = "airoha,an7583";
+
+	config {
+		bootdelay = <2>;
+	};
+};
+
+&voip {
+	slic-power-mode = "none";
+};

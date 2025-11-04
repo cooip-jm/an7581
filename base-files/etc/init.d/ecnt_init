@@ -1,0 +1,223 @@
+#!/bin/sh /etc/rc.common
+
+# The content (edited) of this file
+# is from Airoha SDK /etc/preinit file
+
+START=00
+
+ecnt_chip_type_detect() {
+	PROFILE_CFG=/userfs/profile.cfg
+	if [ -f $PROFILE_CFG ] ; then
+	    . $PROFILE_CFG
+	fi
+
+	if [ "$TCSUPPORT_CPU_AN7583" != "" ]; then
+		echo "an7583"
+	else
+		echo "an7581"
+	fi
+}
+
+ecnt_npu_type_detect() {
+	local chip_type="$1"
+
+	# FIXME: proper detection code is required
+	echo "MT7992"
+}
+
+ecnt_npu_firmware_prepare() {
+	npu_fw_dir="/lib/firmware"
+	chip_type=$(ecnt_chip_type_detect)
+	npu_type=$(ecnt_npu_type_detect $chip_type)
+
+	if [ "$TCSUPPORT_CPU_EN7523" != "" ]; then
+		# nothing should be done in 32-bit case
+		return
+	fi
+
+	[ -e "${npu_fw_dir}/npu_data.bin" ] || touch "${npu_fw_dir}/npu_data.bin"
+	[ -e "${npu_fw_dir}/npu_rv32.bin" ] || touch "${npu_fw_dir}/npu_rv32.bin"
+
+	mount -o bind "${npu_fw_dir}/${chip_type}_${npu_type}/npu_data.bin" "${npu_fw_dir}/npu_data.bin"
+	mount -o bind "${npu_fw_dir}/${chip_type}_${npu_type}/npu_rv32.bin" "${npu_fw_dir}/npu_rv32.bin"
+}
+
+boot() {
+	PROFILE_CFG=/userfs/profile.cfg
+	if [ -f $PROFILE_CFG ] ; then
+	    . $PROFILE_CFG
+	fi
+
+	echo 65535 > /proc/net/skbmgr_driver_max_skb
+	echo 32768 > /proc/net/skbmgr_limit
+	echo 32767 > /proc/net/skbmgr_4k_limit
+	if [ "$TCSUPPORT_CPU_EN7581" != "" ]; then
+		echo 8192 > /proc/br_fdb/mac_limit_total
+	fi
+
+	echo "insmod module_sel.ko"
+	insmod /lib/modules/5.4.55/module_sel.ko
+
+	if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+		if [ "$TCSUPPORT_KERNEL_API" != "" ] ;then
+			echo "insmod ecnt_legacy_api.ko"
+			insmod /lib/modules/5.4.55/ecnt_legacy_api.ko
+		else
+			echo "insmod tcledctrl.ko"
+			insmod /lib/modules/5.4.55/tcledctrl_stub.ko
+		fi
+	fi
+
+	echo "insmod tccicmd.ko"
+	insmod /lib/modules/5.4.55/tccicmd.ko
+
+	echo "insmod sif.ko"
+	insmod /lib/modules/5.4.55/sif.ko
+
+	echo "insmod fe_core.ko"
+	insmod /lib/modules/5.4.55/fe_core.ko
+
+	echo "insmod ifc.ko"
+	insmod /lib/modules/5.4.55/ifc.ko
+
+	echo "insmod qdma_lan.ko"
+	insmod /lib/modules/5.4.55/qdma_lan.ko
+
+	if [ "$TCSUPPORT_NPU_WIFI_OFFLOAD" != "" ]; then
+		if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+			echo "npu_offload enable"
+			echo 1 > /proc/tc3162/npu_en_inode
+		fi
+
+		ecnt_npu_firmware_prepare
+
+		if [ "$TCSUPPORT_CPU_EN7581" != "" ]; then
+			echo "insmod npu_wifi.ko"
+			insmod /lib/modules/5.4.55/npu_wifi.ko
+		fi
+		echo "insmod npu.ko"
+		insmod /lib/modules/5.4.55/npu.ko
+		echo "insmod hostadpt.ko"
+		insmod /lib/modules/5.4.55/hostadpt.ko
+	else
+		echo "has no CONFIG_PACKAGE_kmod-npu_wifi_offload"
+		if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+			echo "npu_offload disable"
+			echo 0 > /proc/tc3162/npu_en_inode
+		fi
+	fi
+
+	echo "insmod eth.ko"
+	insmod /lib/modules/5.4.55/eth.ko
+
+	echo "insmod eth_ephy.ko"
+	insmod /lib/modules/5.4.55/eth_ephy.ko
+
+	echo "insmod qdma_wan.ko"
+	insmod /lib/modules/5.4.55/qdma_wan.ko priPktChk=0
+
+	echo 1 > /proc/tc3162/vport_enable
+
+#	if [ "$TCSUPPORT_WLAN_MT7915D" != "" ]; then
+#		echo "insmod mt7915_ap.ko"
+#		insmod /lib/modules/5.4.55/mt7915_ap.ko
+#	else
+#		echo "insmod mt7603eap.ko"
+#		insmod /lib/modules/5.4.55/mt7603eap.ko
+#
+#		echo "insmod mt7663_ap.ko"
+#		insmod /lib/modules/5.4.55/mt7663_ap.ko
+#	fi
+#	echo "insmod sw_rps_for_wifi.ko"
+#	insmod /lib/modules/5.4.55/sw_rps_for_wifi.ko
+
+	if [ "$TCSUPPORT_SWNAT" != "" ]; then
+		echo "/lib/modules/5.4.55/mt_whnat.ko"
+		insmod /lib/modules/5.4.55/mt_whnat.ko
+	fi
+
+	echo "insmod hw_nat.ko"
+	if [ "$TCSUPPORT_CPU_EN7523" != "" ]; then
+		insmod /lib/modules/5.4.55/hw_nat.ko SRAM_FOE_NUM=7
+	else
+		if [ "$TCSUPPORT_MEMORY_SHRINK" != "" ]; then
+			insmod /lib/modules/hw_nat.ko FOE_NUM=8
+		else
+			insmod /lib/modules/hw_nat.ko FOE_NUM=16
+		fi
+	fi
+
+	if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+		insmod /lib/modules/gre_hw_offload.ko
+		insmod /lib/modules/l2tp_offload.ko
+		insmod /lib/modules/vxlan_hw_offload.ko
+	fi
+
+	insmod /lib/modules/tso2.ko
+
+	if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+		if [ -e "/lib/modules/5.4.55/lro_lan.ko" ]; then
+			echo "insmod lro_lan.ko"
+			insmod /lib/modules/5.4.55/lro_lan.ko
+		fi
+
+		echo 1 smbd > /proc/tc3162/app_shortcut
+
+		for IDENTIFIER in "qdma_lan_int2" "xhci-hcd:usb1"; do
+			IRQ_NUM=$(cat /proc/interrupts | grep "$IDENTIFIER" | awk -F: '{print $1}' | tr -d ' ')
+			echo 4 > /proc/irq/$IRQ_NUM/smp_affinity
+		done
+	fi
+
+#	if [ -f "/proc/tc3162/wan_2_5" ]; then
+#		echo "insmod ae_wan.ko"
+#		insmod /lib/modules/5.4.55/ae_wan.ko
+#	else
+#		echo "insmod pon"
+#	fi
+
+	#echo "insmod secureupgrade.ko"
+	#insmod /lib/modules/5.4.55/secureupgrade.ko
+
+	if [ "$TCSUPPORT_ETHER_8811" != "" ] ;then
+		if [ "$TCSUPPORT_CPU_EN7523" = "" ];then
+			cat /proc/tc3162/chip_id | while read line
+			do
+				if [ "$line" != "55" ]; then
+					echo "7581 reset 8811"
+					echo 31 > /sys/class/gpio/export
+					echo out > /sys/class/gpio/gpio31/direction
+					echo 0 > /sys/class/gpio/gpio31/value
+					sleep 1
+					echo 1 > /sys/class/gpio/gpio31/value
+					echo 31 > /sys/class/gpio/unexport
+				fi
+			done
+		fi
+
+		echo "(1)insmod mdio_arht.ko"
+		insmod /lib/modules/5.4.55/mdio_arht.ko
+
+		echo "(2)insmod air_en8811h.ko"
+		insmod /lib/modules/5.4.55/air_en8811h.ko
+
+		echo "(3)insmod 8811_bbu_api.ko"
+		insmod /lib/modules/5.4.55/8811_bbu_api.ko
+	fi
+
+#	if [ -f "/proc/tc3162/lan_2_5" ]; then
+#		echo "insmod hsgmii_lan.ko"
+#		insmod /lib/modules/5.4.55/hsgmii_lan.ko
+#	else
+#		echo "insmod pon"
+#	fi
+
+	# port-management needs eth0 to be started at least once
+	ifconfig eth0 0.0.0.0
+
+	# assign base macaddr to ethernet ports
+	ethaddr=$(fw_printenv -n ethaddr)
+	for eth in $(ls -hl /sys/class/net/eth0* 2>/dev/null | awk -F'/' '{print$NF}'); do
+		ifconfig $eth hw ether $ethaddr 2>/dev/null
+	done
+}

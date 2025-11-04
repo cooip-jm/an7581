@@ -1,0 +1,64 @@
+if TARGET_airoha
+
+	config KERNEL_GIT_CLONE_URI
+		default "https://dev.iopsys.eu/airoha/linux.git"
+	config KERNEL_GIT_REF
+		default "8c31f253c746c6625a725c7ad5d5886fb15d80ed" if !TARGET_airoha_en7523
+		default "61bad473ba6819b857ad42411fbe4efeb9cd3dd3" if TARGET_airoha_en7523
+
+# Kernel Debug
+	config KERNEL_DEVMEM
+		default y
+
+	config BUSYBOX_CONFIG_DEVMEM
+		default y
+
+# Busybox
+	config BUSYBOX_CONFIG_VCONFIG
+		default y
+
+	config BUSYBOX_CONFIG_TASKSET
+		default y
+
+	config BUSYBOX_CONFIG_IPTUNNEL
+		default y
+
+	config BUSYBOX_CONFIG_FEATURE_IP_TUNNEL
+		default y
+
+# libwifi
+	config LIBWIFI_USE_CTRL_IFACE
+		default y
+
+# hostapd
+	config WPA_MSG_MIN_PRIORITY
+		default 0
+
+# mac80211
+	config PACKAGE_CFG80211_TESTMODE
+		default y
+
+	config PACKAGE_TX_RX_MT76_SPE_COUNTERS
+		default y
+
+	config TARGET_ROOTFS_JFFS2_NAND
+		default n
+
+	config TARGET_ROOTFS_UBIFS
+		default n
+
+	config TARGET_UPGRADE_BUNDLE
+		default y
+
+	config KERNEL_ECONET_SUPPORT_JUMBOFRAMES
+		bool "ECONET Jumbo frames"
+		default n
+
+	config KERNEL_MCAST_IGNORE_ALL_SNOOPERS_JOIN
+		bool "Do not join or leave all-snoopers"
+		default n
+
+	config KERNEL_ECONET_DISABLE_PON_RX_LOS_DETECTION
+		bool "Disable PON RX LOS logic"
+		default n
+endif

@@ -1,0 +1,690 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/dts-v1/;
+
+/ {
+	compatible = "econet,en7523";
+	interrupt-parent = <&gic>;
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	chosen {
+		bootargs = "console=ttyS0,115200n8 earlycon qdma_init=33 serdes_sel=2";
+		stdout-path = &uart1;
+	};
+
+	reserved-memory {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		ranges;
+
+		atf-reserved-memory@80000000 {
+			compatible = "econet,ecnt-atf-reserved-memory";
+			no-map;
+			reg = <0x80000000 0x40000>;
+		};
+
+		npu_reserved: npu_binary@84000000 {
+			no-map;
+			reg = <0x84000000 0x100000>;
+		};
+
+		/* pstore memory reservations */
+		#include "en7523-pstore.dtsi"
+
+	};
+
+	voip: airoha-voice {
+		// -----------------------------------------------------
+		// Slic power mode
+		// -----------------------------------------------------
+		// Possible values:
+		//   BB		- Buck Boost
+		//   IB		- Inverting Buck Boost
+		//   TB		- Buck-Boost fixed tracker AKA 'Tracker Buck Boost'
+		//
+		// Notes:
+		//   1) If slic power mode set to other non-empty value,
+		//      slic modules will NOT be probed/loaded.
+		//   2) If slic power mode is not set or set to empty
+		//      string then "BB" mode will be used as default
+		//   3) voip_loader command line options will override
+		//      DTS settings.
+		// -----------------------------------------------------
+		slic-power-mode = "BB";
+	};
+
+	mt76: airoha-mt76 {
+		// -------------------------------------------------------
+		// Possible chip types: ePAeLNA, ePAiLNA, iPAeLNA, iPAiLNA
+		// -------------------------------------------------------
+		chip-type = "iPAiLNA";
+	};
+
+	psci {
+		compatible = "arm,psci-0.2";
+		method = "smc";
+	};
+
+	cpus {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		cpu-map {
+			cluster0 {
+				core0 {
+					cpu = <&cpu0>;
+				};
+				core1 {
+					cpu = <&cpu1>;
+				};
+			};
+		};
+
+		cpu0: cpu@0 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x0>;
+			enable-method = "psci";
+			clock-frequency = <80000000>;
+			next-level-cache = <&L2_0>;
+		};
+
+		cpu1: cpu@1 {
+			device_type = "cpu";
+			compatible = "arm,cortex-a53";
+			reg = <0x1>;
+			enable-method = "psci";
+			clock-frequency = <80000000>;
+			next-level-cache = <&L2_0>;
+		};
+
+		L2_0: l2-cache0 {
+			compatible = "cache";
+		};
+	};
+
+	gic: interrupt-controller@09000000 {
+		compatible = "arm,gic-v3";
+		interrupt-controller;
+		#interrupt-cells = <3>;
+		#address-cells = <1>;
+		#size-cells = <1>;
+		reg = <0x09000000 0x20000>,
+		      <0x09080000 0x80000>;
+		interrupts = <GIC_PPI 9 IRQ_TYPE_LEVEL_LOW>;
+
+		its: gic-its@09020000 {
+			compatible = "arm,gic-v3-its";
+			msi-controller;
+			#msi-cell = <1>;
+			reg = <0x090200000 0x20000>;
+		};
+	};
+
+
+	timer {
+		compatible = "arm,armv8-timer";
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>,
+			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(4) | IRQ_TYPE_LEVEL_LOW)>;
+		clock-frequency = <25000000>;
+	};
+
+	pmu {
+		//compatible = "arm,armv8-pmuv3";
+		compatible = "arm,cortex-a15-pmu";
+		interrupts = <GIC_PPI 7 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	npu@1e800000 {
+		compatible = "econet,ecnt-npu";
+		reg = <0x1e800000 0x60000>,	//NPU 384K SRAM
+		      <0x1e900000 0x313000>;	//NPU 16K SRAM, Registers
+		memory-region = <&npu_reserved>;
+		interrupts = <GIC_SPI 118 IRQ_TYPE_LEVEL_HIGH>, // 102+16 tr done
+			     <GIC_SPI 119 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 120 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 121 IRQ_TYPE_LEVEL_HIGH>, // 105+16 hadap irq0
+			     <GIC_SPI 122 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 123 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 125 IRQ_TYPE_LEVEL_HIGH>; //mbox2host irq
+	};
+
+	apb_timer1: apb_timer1@1fbf0100 {
+		compatible = "econet,ecnt-timer";
+		reg = <0x1fbf0100 0x40>;
+		interrupts = <GIC_SPI 20 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 21 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 22 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 25 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	memory@80000000 {
+		device_type = "memory";
+		reg = <0x80000000 0x40000000>;
+	};
+
+	rbus@1fa00000 {
+		compatible = "econet,ecnt-rbus";
+		reg = <0x1fa00000 0x1000>;		//RBus Core
+	};
+
+	sram@1fa40000 {
+		compatible = "econet,ecnt-sram";
+		reg = <0x1fa40000 0x8000>,		//GDMP SRAM
+		      <0x08000000 0x40000>,		//L2C SRAM (only for CPU internal access)
+		      <0x1EFC0000 0x40000>,		//L2C SRAM (only for CPU/NPU/GDMA/SPI/Crypto/WOE external access via pbus)
+		      <0x1E880000 0x40000>,		//L2C SRAM (only for CPU/NPU/HSDMA/PCIE external access via npu_rbus)
+		      <0x1fbe3000 0x200>;		//I2C_SLAVE SRAM
+	};
+
+	scu: scu@1fb00000 {
+		compatible = "econet,ecnt-scu";
+			// ------------------------------------------------------------
+			// WARNING:
+			// ------------------------------------------------------------
+			//   1) [dirty hack] NP SCU iomem region length was reduced
+			//	to avoid conflicts with "airoha-boot-reason" driver. This
+			//	does NOT breaks "ecnt-scu" driver because mapping of the
+			//	iomem area actually provide access not only to the
+			//	specified area, but to the whole page, so all regs are
+			//	still accessible.
+			//   2) Actual NP SCU iomem area is:
+			//	  <0x1fb00000 0x960>,	//NP SCU
+			// ------------------------------------------------------------
+		reg = <0x1fb00000 0x4>,		//NP SCU
+			// ------------------------------------------------------------
+			// WARNING:
+			// ------------------------------------------------------------
+			//   1) [dirty hack] Chip SCU iomem region length was reduced
+			//	to avoid conflicts with "en7523-pinctrl" driver. This
+			//	does NOT breaks "ecnt-scu" driver because mapping of the
+			//	iomem area actually provide access not only to the
+			//	specified area, but to the whole page, so all regs are
+			//	still accessible.
+			//   2) Function is_pinctrl_reg() was added to "ecnt-scu" driver
+			//	to check access and prevent writing to pinctrl registers.
+			//	Please keep in sync this function with "en7523-pinctrl"
+			//	driver.
+			//   3) Actual Chip SCU iomem area is:
+			//	  <0x1fa20000 0x360>,	//CHIP SCU
+			// ------------------------------------------------------------
+			<0x1fa20000 0x4>,		//CHIP SCU
+			<0x1fa2FF30 0x10>;		//Rbus clk ctl for FPGA
+		interrupts = <GIC_SPI 47 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	pio: pinctrl {
+		compatible = "airoha,en7523-pinctrl";
+		// --------------------------------------------------------------------
+		// WARNING:
+		// --------------------------------------------------------------------
+		//   1) iomem regions used by this driver overlaps with iomem region
+		//	used by "ecnt-scu" driver. Dirty hack (see scu@1fb00000 dts
+		//	section) was introduced to make "ecnt-scu" and "en7523-pinctrl"
+		//	coexisting.
+		//   2) Please keep in sync iomem areas used by this driver with
+		//	is_pinctrl_reg() function from the "ecnt-scu" driver.
+		// --------------------------------------------------------------------
+		reg = <0x1fa20210 0x18>, /* IOMUX Control Registers */
+			<0x1fa2001C 0x10>, /* IO TX Driving Control Registers */
+			<0x1fa20044 0x10>, /* IO Pull up/down Control Registers */
+			<0x1fa20278 0x8>;  /* LED Mapping Register */
+
+		pinctrl_uart2: uart2grp {
+			function = "uart2";
+			groups = "uart2_grp";
+		};
+
+		pinctrl_sipo: siporclckgrp {
+			function = "sipo_rclk";
+			groups = "sipo_rclk_grp";
+		};
+
+		pinctrl_mdio: mdiogrp {
+			function = "mdio";
+			groups = "mdio_grp";
+		};
+
+		pinctrl_pon: pongrp {
+			function = "pon0";
+			groups = "pon0_grp";
+		};
+	};
+
+	pcie@0x1fa91000 {
+		compatible = "ecnt,pcie-ecnt";
+		device_type = "pci";
+		reg = <0x1fa91000 0x1000>,
+		      <0x1fa92000 0x1000>,
+		      <0x1fa90000 0x1000>,	/* pcie top*/
+		      <0x1a100000 0x1000>,	/* switch lane */
+		      <0x1a148000 0x1000>,	/* 4, rc0 phy base, for change xtal setting */
+		      <0x1a14a000 0x1000>;	/* 5, rc1 phy base, for change xtal setting */
+		interrupts = <GIC_SPI 39 IRQ_TYPE_LEVEL_HIGH>,  //23+16
+			     <GIC_SPI 40 IRQ_TYPE_LEVEL_HIGH>;  //24+16
+		bus-range = <0x00 0xff>;
+		#address-cells = <3>;
+		#size-cells = <2>;
+		/* change xtal for 40M, default is 25M */
+		/* change-xtal; */
+		/* disable io coherent for RC and EP default. */
+		/*dma-coherent;*/
+		ranges = <0x82000000 0 0x20000000  0x20000000  0 0x10000000>;
+
+		pcie0: pcie@0,0 {
+			device_type = "pci";
+			reg = <0x0000 0 0 0 0>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			ranges;
+			interrupt-map-mask = <0 0 0 7>;
+			interrupt-map = <0 0 0 1 &pcie_intc0 1>,
+					<0 0 0 2 &pcie_intc0 2>,
+					<0 0 0 3 &pcie_intc0 3>,
+					<0 0 0 4 &pcie_intc0 4>;
+			pcie-port = <0>;
+			num-lanes = <1>;
+			status = "okay";
+
+			pcie_intc0: interrupt-controller {
+				interrupt-controller;
+				#address-cells = <0>;
+				#interrupt-cells = <1>;
+			};
+		};
+
+		pcie1: pcie@1,0 {
+			device_type = "pci";
+			reg = <0x0800 0 0 0 0>;
+			#address-cells = <3>;
+			#size-cells = <2>;
+			#interrupt-cells = <1>;
+			ranges;
+			interrupt-map-mask = <0 0 0 7>;
+			interrupt-map = <0 0 0 1 &pcie_intc1 1>,
+					<0 0 0 2 &pcie_intc1 2>,
+					<0 0 0 3 &pcie_intc1 3>,
+					<0 0 0 4 &pcie_intc1 4>;
+			pcie-port = <1>;
+			num-lanes = <1>;
+			status = "okay";
+
+			pcie_intc1: interrupt-controller {
+				interrupt-controller;
+				#address-cells = <0>;
+				#interrupt-cells = <1>;
+			};
+		};
+	};
+
+	wdma{
+		compatible = "en751221,wdma";
+		reg = <0x1fa06000 0x400 >,
+		      <0x1fa06400 0x400 >;
+		interrupts = <GIC_SPI 69 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 71 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 72 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 73 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 74 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	wed{
+		compatible = "en751221,wed";
+		wed_num = <2>;
+		pci_slot_map = <0>, <1>;
+		reg = <0x1fa02000 0xb00 >,
+		      <0x1fa03000 0xb00 >;
+		interrupts = <GIC_SPI 67 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	wed2{
+		compatible = "en751221,wed2";
+		wed_num = <2>;
+		pci_slot_map = <0>, <1>;
+		reg = <0x1fa02000 0xb00 >,
+		      <0x1fa03000 0xb00 >;
+		interrupts = <GIC_SPI 67 IRQ_TYPE_LEVEL_HIGH>,
+			     <GIC_SPI 68 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	wed_test{
+		compatible = "en751221,wed_test";
+		wed_num = <2>;
+		reg = <0x1fa02b00 0x100 >,
+		      <0x1fa03b00 0x100 >;
+	};
+
+	i2c0: i2c@1fbf8000 {
+		compatible = "econet,ecnt-i2c";
+		reg = <0x1fbf8000 0x65>;
+	};
+
+	gdump@1fbf9000 {
+		compatible = "econet,ecnt-gdump";
+		reg = <0x1fbf9000 0x84>;
+	};
+
+	crypto_k@1fb70000 {
+		compatible = "econet,ecnt-crypto_k";
+		reg = <0x1fb70000 0x804>;
+		interrupts = <GIC_SPI 44 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	airoha_trng@1faa1000 {
+		compatible = "airoha,airoha-trng";
+		reg = <0x1faa1000 0xc04>;
+		interrupts = <GIC_SPI 35 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	gdma@1fb30000 {
+		compatible = "econet,ecnt-gdma";
+		reg = <0x1fb30000 0x2b0>;
+	};
+
+	xsi: xsi@1fa60000 {
+		compatible = "econet,ecnt-xsi";
+		reg = <0x1fa60000 0x300>,	//hsgmii ae
+		      <0x1fa70000 0x300>,	//hsgmii pcie0
+		      <0x1fa71000 0x300>,	//hsgmii pcie1
+		      <0x1fa80000 0x300>;	//hsgmii usb
+	};
+
+	i2c_slave@1fbe3300 {
+		compatible = "econet,ecnt-i2c_slave";
+		reg = <0x1fbe3300 0x10>;
+		dev0_addr = <0x60>;
+		dev1_addr = <0x62>;
+		interrupts = <GIC_SPI 28 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	uart1: serial@1fbf0000 {
+		compatible = "airoha,en7523-uart";
+		reg = <0x1fbf0000 0x30>;
+		reg-io-width = <4>;
+		reg-shift = <2>;
+		interrupts = <GIC_SPI 18 IRQ_TYPE_LEVEL_HIGH>;
+		clock-frequency = <1843200>;
+		status = "okay";
+	};
+
+	uart2: serial@1fbf0300 {
+		compatible = "airoha,en7523-uart";
+		reg = <0x1fbf0300 0x30>;
+		reg-io-width = <4>;
+		reg-shift = <2>;
+		interrupts = <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
+		clock-frequency = <7372800>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_uart2>;
+		status = "disabled";
+	};
+
+	gpio0: gpio@1fbf0200 {
+		compatible = "airoha,en7523-gpio";
+		airoha,bank-name = "gpio_a";	/* u-boot specific */
+		reg = <0x1fbf0204 0x4>,
+		     <0x1fbf0200 0x4>,
+		     <0x1fbf0220 0x4>,
+		     <0x1fbf0214 0x4>,
+		     <0x1fbf0208 0x4>, /* Interrupt status register */
+		     <0x1fbf0210 0x4>, /* Level 0 */
+		     <0x1fbf028C 0x4>, /* Level 1 */
+		     <0x1fbf020C 0x4>, /* Edge 0 */
+		     <0x1fbf0280 0x4>; /* Edge 1 */
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+		status = "okay";
+	};
+
+	gpio1: gpio@1fbf0270 {
+		compatible = "airoha,en7523-gpio";
+		airoha,bank-name = "gpio_b";	/* u-boot specific */
+		reg = <0x1fbf0270 0x4>,
+		      <0x1fbf0260 0x4>,
+		      <0x1fbf0264 0x4>,
+		      <0x1fbf0278 0x4>,
+		      <0x1fbf027C 0x4>, /* Interrupt status register */
+		      <0x1fbf0290 0x4>, /* Level 0 */
+		      <0x1fbf0294 0x4>, /* Level 1 */
+		      <0x1fbf0284 0x4>, /* Edge 0 */
+		      <0x1fbf0288 0x4>; /* Edge 1 */
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+		interrupt-parent = <&gic>;
+		interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
+		status = "okay";
+	};
+
+	watchdog@0,0 {
+		#interrupt-cells = <1>;
+		compatible = "airoha,en75xx-wdt";
+		timeout-sec = <30>;
+	};
+
+	pwm: pwm@1fbf0200 {
+		compatible = "airoha,en7523-pwm";
+		reg = <0x1fbf0234 0x4>, /* Flash mode cfg */
+		<0x1fbf023C 0x4>, /* Flash period set 0 */
+		<0x1fbf0240 0x4>, /* Flash period set 1 */
+		<0x1fbf0244 0x4>, /* Flash period set 2 */
+		<0x1fbf0248 0x4>, /* Flash period set 3 */
+		<0x1fbf024C 0x4>, /* Flash map cfg 0 */
+		<0x1fbf0250 0x4>, /* Flash map cfg 1 */
+		<0x1fbf0298 0x4>, /* Cycle cfg value 0 */
+		<0x1fbf029C 0x4>, /* Cycle cfg value 1 */
+		<0x1fbf0230 0x4>, /* SIPO Flash mode cfg */
+		<0x1fbf0254 0x4>, /* SIPO Flash map cfg 0 */
+		<0x1fbf0258 0x4>, /* SIPO Flash map cfg 1 */
+		<0x1fbf025C 0x4>, /* SIPO Flash map cfg 2 */
+		<0x1fbf0224 0x4>, /* SIPO LED data */
+		<0x1fbf0228 0x4>, /* SIPO clock divisor */
+		<0x1fbf022C 0x4>; /* SIPO clock delay */
+		/*hc74595;*/
+		#pwm-cells = <3>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&pinctrl_sipo>;
+		status = "disabled";
+	};
+
+	spi_ctrl: spi_controller@1fa10000 {
+		//compatible = "econet,ecnt-spi_ctrl";
+		compatible = "econet,en75xx-spi";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x1fa10000 0x140>,		//SPI Controller Base
+		      <0x00000000 0x1000>;		//SPI Controller auto read interrupt test
+		interrupts = <GIC_SPI 51 IRQ_TYPE_LEVEL_HIGH>;
+
+		scu     = <&scu>;
+		spi2nfi = <&spi_spi2nfi>;
+		spi-ecc = <&spi_ecc>;
+
+		spinand@0 {
+			compatible = "spi-nand";
+			reg = <0x0>;			// Chip select
+			spi-tx-bus-width = <2>;
+			spi-rx-bus-width = <2>;
+			spi-max-frequency = <50000000>;
+		};
+	};
+
+	spi_spi2nfi: spi_spi2nfi@1fa11000 {
+		compatible = "econet,ecnt-spi2nfi";
+		reg = <0x1fa11000 0x160>;	//NFI2SPI
+	};
+
+	spi_ecc: spi_ecc@1fa12000 {
+		compatible = "econet,ecnt-spi_ecc";
+		reg = <0x1fa12000 0x150>;	//NFI ECC
+	};
+
+	frame_engine: frame_engine@1fb50000 {
+		compatible = "econet,ecnt-frame_engine";
+		reg = <0x1fb50000 0x2600>,	//FE + PPE
+		      <0x1fb54000 0x4000>,	//QDMA
+		      <0x1fb58000 0x8000>;	//SWITCH
+		interrupts = <GIC_SPI 37 IRQ_TYPE_LEVEL_HIGH>, // QDMA LAN INT1 21+16
+			     <GIC_SPI 55 IRQ_TYPE_LEVEL_HIGH>, // QDMA LAN INT2 39+16
+			     <GIC_SPI 56 IRQ_TYPE_LEVEL_HIGH>, // QDMA LAN INT3 40+16
+			     <GIC_SPI 57 IRQ_TYPE_LEVEL_HIGH>, // QDMA LAN INT4 41+16
+			     <GIC_SPI 38 IRQ_TYPE_LEVEL_HIGH>, // QDMA WAN INT1 22+16
+			     <GIC_SPI 58 IRQ_TYPE_LEVEL_HIGH>, // QDMA WAN INT2 42+16
+			     <GIC_SPI 59 IRQ_TYPE_LEVEL_HIGH>, // QDMA WAN INT3 43+16
+			     <GIC_SPI 60 IRQ_TYPE_LEVEL_HIGH>, // QDMA WAN INT4 44+16
+			     <GIC_SPI 49 IRQ_TYPE_LEVEL_HIGH>, // FE ERROR INTR 33+16
+			     <GIC_SPI 64 IRQ_TYPE_LEVEL_HIGH>; // PDMA INTR 48+16
+	};
+
+	spi_nor_flash: snor {
+		compatible = "econet,ecnt-snor";
+		spi-controller = <&spi_ctrl>;
+	};
+
+	nand_flash: nand@1fa10000 {
+		compatible = "econet,ecnt-nand";
+		spi-controller = <&spi_ctrl>;
+		spi2nfi = <&spi_spi2nfi>;
+		spi-ecc = <&spi_ecc>;
+	};
+
+	hsdma: dma-controller@1fa01800 {
+		compatible = "econet,ecnt-hsdma";
+		reg = <0x1fa01800 0x300>;
+		interrupts = <GIC_SPI 63 IRQ_TYPE_LEVEL_HIGH>;
+		#dma-cells = <1>;
+		dma-channels = <2>;
+		dma-requests = <2>;
+	};
+
+	cpu_top@1efb0000 {
+		compatible = "econet,ecnt-cpu_top";
+		reg = <0x1efbc800 0x10>;			//CTRL
+	};
+
+	xpon_mac: xpon@1fb64000 {
+		compatible = "econet,ecnt-xpon";
+		reg = <0x1fb64000 0x3e8>,
+		      <0x1fb66000 0x23c>;
+		interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>, // XPON MAC INT 26+16
+			     <GIC_SPI 34 IRQ_TYPE_LEVEL_HIGH>; // DYINGGASP INT 18+16
+	};
+
+	xhci_hcd: xhci@1fab0000 {
+		compatible = "econet,ecnt-xhci";
+		reg = <0x1fab0000 0x3e00>,	//MAC base address
+		      <0x1fab3e00 0x100>;	//IPPC base address
+		interrupts = <GIC_SPI 33 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	pon_phy: pon_phy@1faf0000 {
+		compatible = "econet,ecnt-pon_phy";
+		reg = <0x1faf0000 0x800>,			// PON_PHY_ASIC_RG range
+		      <0x1fa2ff24 0x4>,				// PON_PHY_FPGA_RG_TX_OFF
+		      <0x1faf3000 0xfff>,			// PON_PHY_ASIC_RG range2
+		      <0x1faf4000 0xfff>;			// PON_PHY_ASIC_RG range3
+		interrupts = <GIC_SPI 43 IRQ_TYPE_LEVEL_HIGH>;	// XPON_PHY_INTR 27+16
+	};
+
+	pcm@bfbd0000 {
+		compatible = "econet,ecnt-pcm";
+		reg = <0x1fbd0000 0x4fff>;
+		interrupts = <GIC_SPI 27 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	i2s@1fbe2200 {
+		compatible = "econet,ecnt-i2s";
+		reg = <0x1fbe2200 0xfc>,
+		      <0x1fbe2e00 0x114>;
+		interrupts = <GIC_SPI 48 IRQ_TYPE_LEVEL_HIGH>;
+	};
+
+	pcie_phy: pcie_phy@1fa93700 {
+		compatible = "econet,ecnt-pcie_phy";
+		reg = <0x1fa93700 0x568>,			//PC0 RG range
+		      <0x1fa95700 0x568>;			//PC1 RG range
+	};
+
+	pon_hsgmii: pon_hsgmii@1fa65000 {
+		compatible = "econet,ecnt-pon_hsgmii";
+		reg = <0x1fa65100 0x4a0>,			//PCS mode1 range
+		      <0x1fa65a00 0x1ac>,			//PCS mode2 range
+		      <0x1fa65e00 0x64>,			//AN range
+		      <0x1fa66000 0xdc>;			//rate adaption range
+		interrupts = <GIC_SPI 66 IRQ_TYPE_LEVEL_HIGH>;	// pon_hsgmii INT 50+16
+	};
+
+	sgmii_p0: sgmii_p0@1fa72000 {
+		compatible = "econet,ecnt-sgmii";
+		reg = <0x1fa72100 0x4a0>,			//PCS mode1 range
+		      <0x1fa72a00 0x160>,			//PCS mode2 range
+		      <0x1fa72000 0x64>,			//AN range
+		      <0x1fa72600 0xdc>,			//rate adaption range
+		      <0x1fa72c00 0x3b0>;			//phya
+		interrupts = <GIC_SPI 151 IRQ_TYPE_LEVEL_HIGH>;	// pc0_hsgmii INT 135+16
+		int_name = "sgmii_pcie0";
+		int_id = <0>;
+	};
+
+	sgmii_p1: sgmii_p1@1fa77000 {
+		compatible = "econet,ecnt-sgmii";
+		reg = <0x1fa77100 0x4a0>,			//PCS mode1 range
+		      <0x1fa77a00 0x160>,			//PCS mode2 range
+		      <0x1fa77000 0x64>,			//AN range
+		      <0x1fa77600 0xdc>,			//rate adaption range
+		      <0x1fa77c00 0x3b0>;			//phya
+		interrupts = <GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>;	// pc1_hsgmii INT 136+16
+		int_name = "sgmii_pcie1";
+		int_id = <1>;
+	};
+
+	sgmii_u0: sgmii_u0@1fa81000 {
+		compatible = "econet,ecnt-sgmii";
+		reg = <0x1fa81100 0x4a0>,			//PCS mode1 range
+		      <0x1fa81a00 0x160>,			//PCS mode2 range
+		      <0x1fa81000 0x64>,			//AN range
+		      <0x1fa81600 0xdc>,			//rate adaption range
+		      <0x1fa81c00 0x3b0>;			//phya
+		interrupts = <GIC_SPI 153 IRQ_TYPE_LEVEL_HIGH>;	// usb_hsgmii INT 137+16
+		int_name = "sgmii_usb0";
+		int_id = <2>;
+	};
+
+	usb_phy: usb_phy@1fad0000 {
+		compatible = "econet,ecnt-usb_phy";
+		reg = <0x1fad0000 0x1fff>;
+	};
+
+	thermal_phy: thermal_phy@1efbd000 {
+		compatible = "econet,ecnt-thermal_phy";
+		reg = <0x1efbd000 0x0fff>; //ptp_thermal_ctrl
+		interrupts = <GIC_SPI 23 IRQ_TYPE_LEVEL_HIGH>;	// ptp_therm INT 7+16
+		int_name = "ptp_therm";
+	};
+
+	bootr {
+		compatible = "airoha,airoha-boot-reason";
+		// --------------------------------------------------------------------
+		// WARNING:
+		// --------------------------------------------------------------------
+		//   1) iomem regions used by this driver overlaps with iomem region
+		//	used by "ecnt-scu" driver. Dirty hack (see scu@1fb00000 dts
+		//	section) was introduced to make "ecnt-scu" and "en7581-pinctrl"
+		//	coexisting. The same is used for this driver.
+		reg = <0x1fb00240 0x4>;
+	};
+};

@@ -1,0 +1,52 @@
+#!/bin/sh /etc/rc.common
+
+START=60
+
+boot() {
+	PROFILE_CFG=/userfs/profile.cfg
+	if [ -f $PROFILE_CFG ] ; then
+		. $PROFILE_CFG
+	fi
+
+	if [ ! -x /userfs/bin/voip_loader ]; then
+		return
+	fi
+
+	echo "create voip device"
+	mknod /dev/slic c 231 0
+	mknod /dev/vdsp c 232 0
+	mknod /dev/spi c 233 0
+	mknod /dev/cpu_interrupt c 224 0
+
+	echo "start voip loader"
+	/userfs/bin/voip_loader
+
+	sleep 1
+
+	if [ "$TCSUPPORT_CPU_ARMV8" != "" ] ;then
+		HID=`cat /proc/tc3162/hid`
+		if [ "$HID" = "f" ] || [ "$HID" = "10" ]; then
+			CPUIDX=0x2
+			/userfs/bin/irqCpuBind set PCM1 1
+		else
+			CPUIDX=0x8
+			/userfs/bin/irqCpuBind set PCM1 3
+		fi
+
+		# Setting high priority using fifo sched
+		chrt -f -p 99 `pidof fxs_task`
+
+		taskset -p $CPUIDX `pidof fxs_task`
+		taskset -p $CPUIDX `pidof slicint_task`
+		taskset -p $CPUIDX `pidof cid_task`
+		taskset -p $CPUIDX `pidof pcmreinit_task`
+
+	else
+		if [ -f "/proc/tc3162/sys_is_1004k_support" ] ;then
+			/userfs/bin/irqCpuBind set pcm1 3
+			/userfs/bin/irqCpuBind set pcm2 3
+		else
+			echo 8 > /proc/irq/12/smp_affinity
+		fi
+	fi
+}

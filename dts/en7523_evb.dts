@@ -1,0 +1,26 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/dts-v1/;
+
+#include "en7523-base.dtsi"
+
+/ {
+	model = "EN7523 EVB";
+	compatible = "econet,en7523-evb", "econet,en7523";
+
+	gpios {
+		compatible = "iopsys,tcledctrl_stub";
+		pon-tx-power-gpio = <&gpio0 16 GPIO_ACTIVE_LOW>;
+	};
+
+	config {
+		bootdelay = <2>;
+	};
+};
+
+&pon_phy {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_pon>;
+};

@@ -1,0 +1,70 @@
+setenv __script_get_sysupgrade_cfg_name '
+	fdt addr ${loadaddr} && fdt get value config_name "/configurations" default;
+';
+setenv __script_emmc_write_gpt '
+	echo;
+	echo Test for eMMC presence...;
+	test $? -eq 0 && mmc dev 0;
+	test $? -eq 0 && echo Getting sysupgrade configuration name...;
+	test $? -eq 0 && run __script_get_sysupgrade_cfg_name;
+	test $? -eq 0 && echo Reading gpt parameters from sysupgrade image...;
+	test $? -eq 0 && fdt addr ${loadaddr};
+	test $? -eq 0 && fdt get value gpt_hdr_img_name   "/configurations/${config_name}" gpt-primary-header;
+	test $? -eq 0 && fdt get value gpt_entry_img_name "/configurations/${config_name}" gpt-primary-entry;
+	test $? -eq 0 && fdt get value gpt_alt_img_name   "/configurations/${config_name}" gpt-alternate;
+	test $? -eq 0 && fdt get value gpt_entry_start    "/configurations/${config_name}" gpt-primary-entry-offset;
+	test $? -eq 0 && fdt get value gpt_alt_start      "/configurations/${config_name}" gpt-alternate-offset;
+	test $? -eq 0 && echo Writing Protective MBR and Primary GPT header...;
+	test $? -eq 0 && imxtract ${loadaddr} ${gpt_hdr_img_name};
+	test $? -eq 0 && setexpr tmp ${filesize} + 0x1ff;
+	test $? -eq 0 && setexpr tmp $tmp / 0x200;
+	test $? -eq 0 && mmc write ${fileaddr} 0 $tmp;
+	test $? -eq 0 && echo Writing Primary GPT entry table...;
+	test $? -eq 0 && imxtract ${loadaddr} ${gpt_entry_img_name};
+	test $? -eq 0 && setexpr tmp ${filesize} + 0x1ff;
+	test $? -eq 0 && setexpr tmp $tmp / 0x200;
+	test $? -eq 0 && mmc write ${fileaddr} ${gpt_entry_start} $tmp;
+	test $? -eq 0 && echo Writing Alternative GPT header and entry table...;
+	test $? -eq 0 && imxtract ${loadaddr} ${gpt_alt_img_name};
+	test $? -eq 0 && setexpr tmp ${filesize} + 0x1ff;
+	test $? -eq 0 && setexpr tmp $tmp / 0x200;
+	test $? -eq 0 && mmc write ${fileaddr} ${gpt_alt_start} $tmp;
+	env set result $?;
+	echo;
+	echo -n "Writing GPT to eMMC -- ";
+	env delete config_name gpt_hdr_img_name gpt_entry_img_name gpt_alt_img_name;
+	env delete gpt_entry_start gpt_alt_start fileaddr filesize tmp;
+	run do_report_result;
+';
+setenv __script_emmc_clear_part '
+	mmc erase ${part_name};
+	env set result $?;
+	echo;
+	echo -n "Clear partition ${part_name} -- ";
+	env delete part_name;
+	run do_report_result;
+';
+# This command by design should delete all environment variables added by
+# this script during its sourcing. All variables, including this one...
+setenv __script_cleanup_env '
+	echo Cleanup...;
+	env delete __script_get_sysupgrade_cfg_name __script_emmc_write_gpt __script_emmc_clear_part;
+	env delete __script_emmc_write_sysupgrade __script_emmc_write_production;
+	env delete __script_cleanup_env;
+';
+# Used by u-boot 'update_itb_force_all_emmc' command
+setenv __script_emmc_write_sysupgrade '
+	run __script_emmc_write_gpt update_itb_prepare do_update_bank2 do_update_bank1 do_update_uboot_img do_update_uboot_env clear_overlay2 clear_overlay1;
+	test $? -eq 0 && run __script_cleanup_env;
+	test $? -eq 0 && run update_itb_reset_active_image;
+';
+# Used by production image. This command can't "run __script_emmc_write_sysupgrade"
+# because __script_cleanup_env by design should remove all script variables (including
+# __script_emmc_clear_part one).
+setenv __script_emmc_write_production '
+	run __script_emmc_write_gpt update_itb_prepare do_update_bank2 do_update_bank1 do_update_uboot_img do_update_uboot_env clear_overlay2 clear_overlay1;
+	test $? -eq 0 && setenv part_name art && run __script_emmc_clear_part;
+	test $? -eq 0 && setenv part_name boarddata && run __script_emmc_clear_part;
+	test $? -eq 0 && run __script_cleanup_env;
+	test $? -eq 0 && run update_itb_reset_active_image;
+';

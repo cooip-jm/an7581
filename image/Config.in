@@ -1,0 +1,7 @@
+menu "Image options IOPSYS Airoha"
+	depends on TARGET_airoha
+
+source "../../iopsys-common/common.in"
+
+endmenu
+

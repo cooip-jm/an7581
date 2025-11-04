@@ -1,0 +1,27 @@
+{
+  "banks": [
+    {
+      "id": 1,
+      "name": "A",
+      "rootfs": "/dev/mmcblk0p65",
+      "overlay": "/tmp/rootfs_data1"
+    },
+    {
+      "id": 2,
+      "name": "B",
+      "rootfs": "/dev/mmcblk0p66",
+      "overlay": "/tmp/rootfs_data2"
+    }
+  ],
+  "overlay_scope": [
+    "/"
+  ],
+  "mounts": [
+    {
+      "mountpoint": "/boarddata",
+      "device": "block:boarddata",
+      "type": "auto",
+      "options": ["ro"]
+    }
+  ]
+}

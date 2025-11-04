@@ -1,0 +1,46 @@
+#!/bin/sh /etc/rc.common
+
+START=11
+
+. /usr/share/libubox/jshn.sh
+
+NEED_AE_WAN=
+
+boot() {
+	PROFILE_CFG=/userfs/profile.cfg
+	if [ -f $PROFILE_CFG ]; then
+		. $PROFILE_CFG
+	fi
+
+	[ -f /etc/board.json ] || return 0
+
+	json_init
+	json_load_file /etc/board.json
+	json_select network
+	json_select wan 2>/dev/null
+	json_get_var wan_device device
+	[ $wan_device == "ae_wan" ] && NEED_AE_WAN=1
+	json_select ..
+	json_cleanup
+
+	if [ "$NEED_AE_WAN" = "1" ]; then
+		local optical_tech="$(uci -q get optical.tech.current)"
+		local silentstart="$(uci -q get optical.tech.silentstart)"
+		local quirkfile="$(uci -q get optical.tech.quirkfile)"
+
+		[ -n "$quirkfile" ] && quirkfile="quirkfile=\"${quirkfile}\""
+		[ "$silentstart" != "no" -a "$silentstart" != "0" -a -n "$silentstart" ] && silentstart=1 || silentstart=0
+
+		if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+			echo "insmod xpon_hal.ko"
+			insmod /lib/modules/5.4.55/xpon_hal.ko
+		fi
+
+		if [ "$optical_tech" = "ae" -o -z "$optical_tech" ]; then
+			# Load AE WAN kernel module
+			echo "insmod ae_wan.ko"
+			insmod /lib/modules/5.4.55/ae_wan.ko
+			[ -f /lib/modules/5.4.55/en-sfp.ko ] && insmod /lib/modules/5.4.55/en-sfp.ko $quirkfile silentstart="$silentstart"
+		fi
+	fi
+}

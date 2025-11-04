@@ -1,0 +1,11 @@
+#!/bin/sh
+
+[ "$PROTOCOL" = "wireguard" ] || exit 0
+[ "$ACTION" = "post-setup" -o "$ACTION" = "pre-teardown" ] || exit 0
+[ -n "$INTERFACE" ] || exit 0
+
+readonly LISTEN_PORT="$(wg show "${INTERFACE}" listen-port)"
+[ -n "$LISTEN_PORT" ] || exit 0
+
+[ "$ACTION" = "post-setup" ] && CMD=add || CMD=del
+/userfs/bin/ppemgr localin $CMD dport $((LISTEN_PORT))

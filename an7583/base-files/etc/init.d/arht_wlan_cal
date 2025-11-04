@@ -1,0 +1,151 @@
+#!/bin/sh /etc/rc.common
+# (C) 2013 openwrt.org
+
+START=10
+STOP=99
+
+PROFILE_CFG=/userfs/profile.cfg
+if [ -f $PROFILE_CFG ] ; then
+    . $PROFILE_CFG
+fi
+
+
+get_eeprom_bin_from_flash()
+{
+
+if [ "$TCSUPPORT_WLAN_MT7990" != "" ] || [ "$TCSUPPORT_WLAN_MT7992" != "" ] || [ "$TCSUPPORT_WLAN_MT7993" != "" ] ;then
+	[ -f "/etc/wireless/l1profile.dat" ] || return
+	# first line "Default" is illegal in shell
+	cat /etc/wireless/l1profile.dat | grep "EEPROM" > /tmp/l1profile.sh
+
+	. /tmp/l1profile.sh
+
+	[ "$FIRMWARE" != "" ] || FIRMWARE=$INDEX0_EEPROM_name
+	FW="/lib/firmware/$FIRMWARE"
+	[ -e "$FW" ] && return
+    
+	if [ "$TCSUPPORT_WLAN_MT7990" != "" ] ;then
+		size=$((INDEX0_EEPROM_size))
+		/sbin/ecnt_wl_e2p_chk -c 7990 -b 6 -s $size
+		sleep 1
+		if [ -f "/tmp/wifi_6g.bin" ]; then
+			echo "mv /tmp/wifi_6g.bin /lib/firmware/e2p"
+			mv /tmp/wifi_6g.bin /lib/firmware/e2p
+		fi
+	elif [ "$TCSUPPORT_WLAN_MT7992" != "" ] ;then
+		size=$((INDEX0_EEPROM_size))
+		/sbin/ecnt_wl_e2p_chk -c 7992 -b 6 -s $size
+		sleep 1
+		if [ -f "/tmp/wifi_6g.bin" ]; then
+			echo "mv /tmp/wifi_6g.bin /lib/firmware/e2p"
+			mv /tmp/wifi_6g.bin /lib/firmware/e2p
+		fi
+	elif [ "$TCSUPPORT_WLAN_MT7993" != "" ] ;then
+		size=$((INDEX0_EEPROM_size))
+		/sbin/ecnt_wl_e2p_chk -c 7993 -b 6 -s $size
+		sleep 1
+		if [ -f "/tmp/wifi_6g.bin" ]; then
+			echo "mv /tmp/wifi_6g.bin /lib/firmware/e2p"
+			mv /tmp/wifi_6g.bin /lib/firmware/e2p
+		fi
+	fi
+	rm -f /tmp/l1profile.sh
+else
+	/sbin/ecnt_wl_e2p_chk -a
+	sleep 1
+
+	if [ -f "/tmp/wifi_2g.bin" ]; then
+		echo "mv /tmp/wifi_2g.bin /etc/RT30xxEEPROM.bin"
+		mv /tmp/wifi_2g.bin /etc/RT30xxEEPROM.bin
+	fi
+	if [ -f "/tmp/wifi_5g.bin" ]; then
+		echo "mv /tmp/wifi_5g.bin /etc/Wireless/RT2860AP_AC/RT30xxEEPROM.bin"
+		mv /tmp/wifi_5g.bin /etc/Wireless/RT2860AP_AC/RT30xxEEPROM.bin
+	fi
+
+fi
+}
+
+chk_mac_addr_in_dat()
+{
+if [ "$TCSUPPORT_WLAN_MT7990" != "" ] || [ "$TCSUPPORT_WLAN_MT7992" != "" ] || [ "$TCSUPPORT_WLAN_MT7993" != "" ] ;then
+	[ -f "/etc/wireless/l1profile.dat" ] || return
+	# first line "Default" is illegal in shell
+	cat /etc/wireless/l1profile.dat | grep "profile_path" > /tmp/l1profile.sh
+
+	. /tmp/l1profile.sh
+
+	[ "$PROFILE" != "" ] || PROFILE=$INDEX0_profile_path
+	profile="$PROFILE"
+	[ -f $profile ] || return
+
+	ethmac0=`ifconfig eth0 | grep HWaddr | awk '{ print $5 }'`
+	add="${ethmac0:15:2}"
+	addr=$(printf "%02X\n" $((0x${add}+0x1)))
+	ethmac="${ethmac0:0:2}:${ethmac0:3:2}:${ethmac0:6:2}:${ethmac0:9:2}:${ethmac0:12:2}:${addr}"
+
+	wificonf use $profile
+	wifiaddr=`wificonf get MacAddress`
+	
+	if [[ "$wifiaddr" != "$ethmac" ]]; then
+		wificonf set MacAddress "$ethmac"
+		sync
+	fi	
+	rm -f /tmp/l1profile.sh
+else
+	echo "chk_mac_addr_in_dat do noting"
+fi
+}
+
+set_mode_in_dat()
+{
+if [ "$TCSUPPORT_WLAN_MT7990" != "" ] || [ "$TCSUPPORT_WLAN_MT7992" != "" ] || [ "$TCSUPPORT_WLAN_MT7993" != "" ] ;then
+	[ -f "/etc/wireless/l1profile.dat" ] || return
+	# first line "Default" is illegal in shell
+	cat /etc/wireless/l1profile.dat | grep "profile_path" > /tmp/l1profile.sh
+
+	. /tmp/l1profile.sh
+
+	[ "$PROFILE" != "" ] || PROFILE=$INDEX0_profile_path
+	profile="$PROFILE"
+	[ -f $profile ] || return
+	wificonf use $profile
+	e2paccessmode=`wificonf get E2pAccessMode`
+
+	if [[ "$e2paccessmode" == 4 ]] || [[ "$e2paccessmode" == 2 ]]; then
+		if hexdump -v -e '/1 "%02X\n"' "/lib/firmware/e2p" | grep -qv "00"; then
+			testmode=`hexdump -s 0x1a0 -n 16 /lib/firmware/e2p | sed -n '1,1p' | cut -c 44-45`
+			if [ $((0x${testmode} & 0x1)) -eq $((0x1)) ]; then
+				wificonf use $profile
+				wificonf set TestModeEn 1
+				sync
+			else
+				wificonf use $profile
+				wificonf set TestModeEn 0
+				sync
+			fi
+		else
+				echo "/lib/firmware/e2p is empty,set TestModeEn to 1"
+				wificonf use $profile
+				wificonf set TestModeEn 1
+				sync
+		fi
+	fi
+else
+	echo "set_mode_in_dat do noting"
+fi
+}
+
+start() {
+	get_eeprom_bin_from_flash
+
+#	MAC is set in other place
+#	chk_mac_addr_in_dat
+
+#	Disabled temporary to supress TestMode enabling
+#	set_mode_in_dat
+}
+
+stop() {
+	echo "Stopping"
+}

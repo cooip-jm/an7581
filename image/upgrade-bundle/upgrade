@@ -1,0 +1,131 @@
+#!/bin/sh
+
+source /lib/functions.sh
+source /lib/functions/iopsys-system-layout.sh
+source /lib/upgrade/platform.sh
+
+invocation=$1
+image=$2
+log_tag="$0 $1"
+
+gpt_era_bootloader_version=8000
+old_bootloader_marker="/tmp/_pre_GPT_on_eMMC_bootloader_detected"
+
+log() {
+	logger -s -p daemon.info -t "$log_tag" -- "$@"
+}
+
+do_pre_upgrade() {
+	local image=$1
+	local bootloader_dev
+	local bootloader_version
+
+	log "- pre_upgrade -"
+	if [ ! -d /sys/bus/platform/drivers/en75xx-spi ]; then
+		log "ERROR: en7xx-spi bus driver is not detected. For upgrade from IOWRT 6.5, please upgrade to IOWRT 7.3.x (or 7.2.x or 7.1.x) first."
+		exit 1
+	fi
+	if [ ! -d /sys/bus/spi/drivers/spi-nand ]; then
+		log "ERROR: spi-nand flash driver is not detected. For upgrade from IOWRT 6.5, please upgrade to IOWRT 7.3.x (or 7.2.x or 7.1.x) first."
+		exit 1
+	fi
+
+	if [ "$(get_root_device_type)" = emmc ]; then
+		# booted from eMMC
+		bootloader_dev=$(get_bootloader_dev)
+		if [ -e "${bootloader_dev}" ]; then
+			bootloader_version=$(get_bootloader_version $bootloader_dev)
+			if [ ${bootloader_version} -lt ${gpt_era_bootloader_version} ]; then
+				# old bootloader detected, create a mark for post_upgrade
+				touch ${old_bootloader_marker}
+			else
+				# no additional steps required, remove mark (if someone create it)
+				rm -f ${old_bootloader_marker}
+			fi
+		fi
+	fi
+	return 0
+}
+
+do_post_upgrade() {
+	local image=$1
+	local bootloader_dev
+	local bootloader_version
+	log "- post_upgrade -"
+
+	if [ "$(get_root_device_type)" = emmc ]; then
+		# booted from eMMC
+		bootloader_dev=$(get_bootloader_dev)
+		if [ -e "${bootloader_dev}" ]; then
+			bootloader_version=$(get_bootloader_version $bootloader_dev)
+			if [ ${bootloader_version} -ge ${gpt_era_bootloader_version} ] && [ -e ${old_bootloader_marker} ]; then
+				# bootloader was just upgraded from pre-GPT_on_eMMC era.
+				# GPT partitions on eMMC needs to be created
+				do_gpt_partitions_create "$image" || return
+				flash_current_boot "$image" || return
+			fi
+		fi
+	fi
+	return 0
+}
+
+flash_current_boot() {
+	local image="$1"
+	local current_bank="$(iopsys_get_current_bank_id)"
+	local current_boot_part="$(system_layout_device_spec_to_device "block:boot${current_bank}")"
+
+	fdtextract -e boot "$image" | dd of="$current_boot_part" bs=1M conv=fsync || return
+	log "Flashed current boot partition as well $current_boot_part"
+}
+
+get_bootloader_dev () {
+	local dev
+
+	dev=$(system_layout_device_spec_to_device block:bootloader 2>/dev/null)
+	[ ! -e "$dev" ] && dev=$(__get_bootloader_device 2>/dev/null)
+	[ ! -e "$dev" ] && dev=""
+	echo "$dev"
+}
+
+get_bootloader_version() {
+	local iopsys_bootloader_version="0"
+	local loader_device="$1"
+
+	json_init
+	json_load "$(strings "$loader_device" | awk '/938f0820-2ffb-11e7-bbc9-2f21351ee6fb:/ {$1=""; print $0}' 2> /dev/null | head -n1 | awk '{$1=$1; print}')"
+	json_get_vars iopsys_bootloader_version
+	iopsys_bootloader_version=$((iopsys_bootloader_version))
+	echo "${iopsys_bootloader_version}"
+}
+
+do_gpt_partitions_create() {
+	local image="$1"
+	local board_name=$(board_name)
+	local block_dev=$(get_real_root_device | sed 's/p[0-9]*$//')
+	local gpt_primary_header gpt_primary_entry gpt_alternate
+	local gpt_primary_entry_offset gpt_alternate_offset
+
+	gpt_primary_header=$(fdtget -t s "$image" "/configurations/${board_name}" gpt-primary-header 2>/dev/null)
+	gpt_primary_entry=$(fdtget -t s "$image" "/configurations/${board_name}" gpt-primary-entry 2>/dev/null)
+	gpt_primary_entry_offset=$(fdtget -t u "$image" "/configurations/${board_name}" gpt-primary-entry-offset 2>/dev/null)
+	gpt_alternate=$(fdtget -t s "$image" "/configurations/${board_name}" gpt-alternate 2>/dev/null)
+	gpt_alternate_offset=$(fdtget -t u "$image" "/configurations/${board_name}" gpt-alternate-offset 2>/dev/null)
+
+	if [ 0 -lt ${gpt_primary_entry_offset} ] && [ 0 -lt ${gpt_alternate_offset} ]; then
+		log "Writing GPT partition table to ${block_dev} device..."
+		[ $? -eq 0 ] && fdtextract -e ${gpt_primary_header} ${image} | dd of=${block_dev} bs=512 count=2
+		[ $? -eq 0 ] && fdtextract -e ${gpt_primary_entry}  ${image} | dd of=${block_dev} bs=512 count=32 seek=${gpt_primary_entry_offset}
+		[ $? -eq 0 ] && fdtextract -e ${gpt_alternate}      ${image} | dd of=${block_dev} bs=512 count=33 seek=${gpt_alternate_offset}
+		[ $? -eq 0 ] && sync "${block_dev}"
+	fi
+	return $?;
+}
+
+case $invocation in
+	pre_upgrade)
+		do_pre_upgrade $image
+		;;
+	post_upgrade)
+		do_post_upgrade $image
+		;;
+esac

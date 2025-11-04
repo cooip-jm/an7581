@@ -1,0 +1,40 @@
+#!/bin/sh
+
+[ -e /etc/config/network ] && exit 0
+
+touch /etc/config/network
+
+CFG=/etc/board.json
+
+. /lib/functions/uci-defaults.sh
+
+airoha_setup_interfaces()
+{
+	local board="$1"
+
+	case $board in
+
+	airoha,an7583*)
+		ucidef_set_interface_lan "eth0.1 eth0.2 eth0.3 eth0.4"
+		;;
+
+	econet,en7581*)
+		ucidef_set_interface_lan "eth0.1 eth0.2 eth0.3 eth0.4"
+		;;
+
+	econet,en7523*)
+		ucidef_set_interface_lan "eth0.1 eth0.2 eth0.3 eth0.4"
+		;;
+
+	*)
+		echo "Unsupported hardware, $1. Network interfaces not intialized"
+		;;
+	esac
+}
+
+board_config_update
+board=$(board_name)
+airoha_setup_interfaces $board
+board_config_flush
+
+exit 0

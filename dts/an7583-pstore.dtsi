@@ -1,0 +1,22 @@
+/*
+ * AN7583 pstore reserved memory dtsi template
+ */
+
+/*
+ * Reserve 512 KiB at the end of free memory. This area MUST be
+ * below memory area used by u-boot itself. See reserved[3] area
+ * in the results of u-boot's "bdinfo" command.
+ */
+#define AN7583_MEM_END		0x9e800000	/* boards with 512 Mb of RAM */
+#define PSTORE_RSRVD_MEM_SIZE	0x80000
+#define PSTORE_RSRVD_MEM_ADDR	(AN7583_MEM_END - PSTORE_RSRVD_MEM_SIZE)
+
+pstore: pstore {
+	compatible = "ramoops";
+	no-map;
+	reg = <0x0 PSTORE_RSRVD_MEM_ADDR 0x0 PSTORE_RSRVD_MEM_SIZE>;
+	record-size = <0x20000>;		/* 128KiB per record */
+	console-size = <0x20000>;		/* 128KiB for console */
+	pmsg-size = <0x1000>; 			/* 4KiB for user data */
+	ecc-size = <16>;
+};

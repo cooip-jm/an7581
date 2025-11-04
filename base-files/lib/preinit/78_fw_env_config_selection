@@ -1,0 +1,14 @@
+# Copyright (C) 2024 iopsys.eu
+
+# We need environment access before mounting overlays,
+# even before pivot_root... but in the case of eMMC
+# environment placed not in UBI, so prepare proper config
+do_fw_env_config_selection () {
+	if grep -q 'root=/dev/mmcblk0' /proc/cmdline; then
+		mount -o bind "/etc/fw_env.config.emmc" "/etc/fw_env.config"
+	else
+		mount -o bind "/etc/fw_env.config.ubi" "/etc/fw_env.config"
+	fi
+}
+
+[ "$INITRAMFS" = "1" ] || boot_hook_add preinit_main do_fw_env_config_selection

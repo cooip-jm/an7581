@@ -1,0 +1,18 @@
+/*
+ * EN7523 pstore reserved memory dtsi template
+ */
+
+/* Reserve 512 KiB at the end of free memory*/
+#define EN7523_MEM_END             0x90000000
+#define PSTORE_RSRVD_MEM_SIZE      0x80000
+#define PSTORE_RSRVD_MEM_ADDR (EN7523_MEM_END - PSTORE_RSRVD_MEM_SIZE)
+
+pstore: pstore {
+	compatible = "ramoops";
+	no-map;
+	reg = <PSTORE_RSRVD_MEM_ADDR PSTORE_RSRVD_MEM_SIZE>;
+	record-size = <0x20000>;		/* 128KiB per record */
+	console-size = <0x20000>;		/* 128KiB for console */
+	pmsg-size = <0x1000>; 			/* 4KiB for user data */
+	ecc-size = <16>;
+};

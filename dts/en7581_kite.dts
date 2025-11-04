@@ -1,0 +1,28 @@
+#include <dt-bindings/interrupt-controller/irq.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/input/input.h>
+
+/dts-v1/;
+
+#include "en7581-base.dtsi"
+
+/ {
+	model = "EN75xx GENERIC";
+	compatible = "econet,en7581-kite", "econet,en7581", "airoha,en7581";
+
+	chosen {
+		bootargs = "console=ttyS0,115200n8 qdma_init=bb onu_type=72 serdes_ethernet=112 serdes_wifi1=001 serdes_wifi2=001 serdes_usb1=000 serdes_usb2=002 serdes_pon=000";
+		stdout-path = &uart1;
+	};
+
+	config {
+		bootdelay = <2>;
+	};
+};
+
+&voip {
+	slic-power-mode = "none";
+};
+

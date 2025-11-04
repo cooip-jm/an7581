@@ -1,0 +1,23 @@
+#!/bin/sh
+
+. /lib/functions.sh
+
+# Exit if there was already a default network config
+[ -f /rom/etc/config/network ] && exit 0
+
+set_multicast_to_unicast()
+{
+	cfg="$1"
+
+	config_get type $cfg type
+	[ "$type" == "bridge" ] || return
+
+	config_get multicast_to_unicast $cfg multicast_to_unicast
+	[ -n "$multicast_to_unicast" ] && return
+
+	uci -q set network.$cfg.multicast_to_unicast=0
+}
+
+config_load network
+config_foreach set_multicast_to_unicast device
+exit 0

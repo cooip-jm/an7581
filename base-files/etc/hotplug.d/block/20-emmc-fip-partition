@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright (C) 2025 IOPSYS Software Solutions AB
+
+FIP_PARTITION_NUMBER=64
+FIP_PARTITION_LABEL=fip
+FIP_PARTITION_SYMLINK=/dev/bootloader
+
+if [ "$DEVTYPE" = disk ] && [ "$DEVICENAME" = mmcblk0 ]; then
+	case "$ACTION" in
+	add)
+		# The Airoha Boot ROM reads FIP from 2 KB offset. FIP goes until 512KB
+		# Create a 510 KB partition in software only, because this partition
+		# cannot be stored in the GPT. The reason for this is that in GPT all
+		# partitions must start after the PGPT entries, but the GPT entries (16 KB)
+		# cannot be put right after GPT header at 1KB, because the boot ROM
+		# expects FIP to be at 2 KB.
+		blkpg-part add -l "$FIP_PARTITION_LABEL" "/dev/$DEVICENAME" "$FIP_PARTITION_NUMBER" 2048 522240
+		# While the kernel UAPI has a field for the partition label and
+		# we set it, there exists no code in the kernel that makes use of it.
+		# Create a symlink as a workaround while kernel is lacking the functionality
+		ln -sf "${DEVICENAME}p${FIP_PARTITION_NUMBER}" "$FIP_PARTITION_SYMLINK"
+		;;
+	remove)
+		rm "$FIP_PARTITION_SYMLINK"
+		;;
+	esac
+fi
