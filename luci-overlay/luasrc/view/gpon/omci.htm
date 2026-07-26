@@ -1,0 +1,52 @@
+<%+header%>
+
+<h2><%:OMCI Status%></h2>
+
+<fieldset class="cbi-section">
+    <legend><%:OMCI Management Interface%></legend>
+    <table class="cbi-section-table" style="width:100%;">
+        <tr>
+            <td style="width:250px;"><strong><%:OMCI State%></strong></td>
+            <td id="omci_state"><%= info.state or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:Serial Number%></strong></td>
+            <td id="omci_sn"><%= info.sn or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:Equipment ID%></strong></td>
+            <td id="omci_eqid"><%= info.eqid or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong>omciMgr Process</strong></td>
+            <td>
+                <% if info.omcimgr_running then %>
+                    <span style="color:green;"><%:Running%></span>
+                <% else %>
+                    <span style="color:red;"><%:Stopped%></span>
+                <% end %>
+            </td>
+        </tr>
+    </table>
+</fieldset>
+
+<fieldset class="cbi-section">
+    <legend><%:OMCI Control%></legend>
+    <div style="margin-top:10px;">
+        <input type="button" class="cbi-button" value="<%:Restart omciMgr%>" onclick="restartOMCI()" />
+    </div>
+</fieldset>
+
+<script>
+function restartOMCI() {
+    if (!confirm('Restart PON daemons?')) return;
+    fetch('<%=luci.dispatcher.build_url("admin/network/gpon/api/restart")%>?service=omcimgr', {
+        method: 'POST'
+    }).then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (d.success) location.reload();
+    });
+}
+</script>
+
+<%+footer%>

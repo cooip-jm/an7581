@@ -1,0 +1,9 @@
+config ani
+    option enable '1'
+    option serial_number ''
+    option ploam_password ''
+    option ploam_hexadecimalpassword '0'
+    option loid ''
+    option loid_password ''
+    option equipment_id ''
+    option onu_version ''

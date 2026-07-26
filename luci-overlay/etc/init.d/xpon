@@ -1,0 +1,55 @@
+#!/bin/sh /etc/rc.common
+
+# PON daemon manager — starts ponmgr_cfg + omci, applies UCI config
+# Matches IOPSYS ponmngr/files/common/etc/init.d/xpon
+# START=19 (runs after ecnt_xpon at 11)
+
+START=19
+STOP=91
+
+USE_PROCD=1
+
+. /lib/functions.sh
+include /lib/xpon
+
+configure_serial_number() {
+    local serial_number="$(uci -q get xpon.ani.serial_number)"
+    if [ ${#serial_number} -eq 12 ]; then
+        local vendor_id="${serial_number:0:4}"
+        local vssn="${serial_number:4:8}"
+    else
+        logger -s -t "xpon" "Serial number not found in UCI, ONT will probably not be registered at the OLT."
+        logger -s -t "xpon" "Please configure a valid serial number."
+        return
+    fi
+
+    set_serial_number "${vendor_id}" "${vssn}"
+}
+
+configure_ploam_password() {
+    local passwd="$(uci -q get xpon.ani.ploam_password)"
+    local hex="$(uci -q get xpon.ani.ploam_hexadecimalpassword)"
+
+    [ -z "${passwd}" ] && return
+
+    set_ploam_password "${passwd}" "${hex}"
+}
+
+start_service() {
+    if [ "$(uci -q get xpon.ani.enable)" = "1" ]; then
+        configure_serial_number
+        configure_ploam_password
+        apply_xpon_uci_config
+        init_xpon
+    else
+        apply_extra_xpon_config
+    fi
+}
+
+stop_service() {
+    deinit_xpon
+}
+
+service_triggers() {
+    procd_add_reload_trigger "xpon"
+}

@@ -1,0 +1,71 @@
+<%+header%>
+
+<h2><%:Optical Module Information%></h2>
+
+<fieldset class="cbi-section">
+    <legend><%:SFP/BOSA Optical Parameters%></legend>
+    <table class="cbi-section-table" style="width:100%;">
+        <tr>
+            <td style="width:250px;"><strong><%:TX Power (dBm)%></strong></td>
+            <td id="opt_tx_power"><%= optical.tx_power or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:RX Power (dBm)%></strong></td>
+            <td id="opt_rx_power"><%= optical.rx_power or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:Operating Temperature (C)%></strong></td>
+            <td id="opt_temp"><%= optical.temperature or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:Bias Current (uA)%></strong></td>
+            <td id="opt_bias"><%= optical.bias_current or "N/A" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:Supply Voltage (mV)%></strong></td>
+            <td id="opt_volt"><%= optical.voltage or "N/A" %></td>
+        </tr>
+    </table>
+</fieldset>
+
+<fieldset class="cbi-section">
+    <legend><%:Link Statistics%></legend>
+    <table class="cbi-section-table" style="width:100%;">
+        <tr>
+            <td style="width:250px;"><strong><%:TX Packets%></strong></td>
+            <td id="opt_tx_pkts"><%= optical.tx_packets or "0" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:RX Packets%></strong></td>
+            <td id="opt_rx_pkts"><%= optical.rx_packets or "0" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:TX Bytes%></strong></td>
+            <td id="opt_tx_bytes"><%= optical.tx_bytes or "0" %></td>
+        </tr>
+        <tr>
+            <td><strong><%:RX Bytes%></strong></td>
+            <td id="opt_rx_bytes"><%= optical.rx_bytes or "0" %></td>
+        </tr>
+    </table>
+</fieldset>
+
+<script>
+setInterval(function() {
+    fetch('<%=luci.dispatcher.build_url("admin/network/gpon/api/optical")%>')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            document.getElementById('opt_tx_power').textContent = d.tx_power || 'N/A';
+            document.getElementById('opt_rx_power').textContent = d.rx_power || 'N/A';
+            document.getElementById('opt_temp').textContent = d.temperature || 'N/A';
+            document.getElementById('opt_bias').textContent = d.bias_current || 'N/A';
+            document.getElementById('opt_volt').textContent = d.voltage || 'N/A';
+            document.getElementById('opt_tx_pkts').textContent = d.tx_packets || '0';
+            document.getElementById('opt_rx_pkts').textContent = d.rx_packets || '0';
+            document.getElementById('opt_tx_bytes').textContent = d.tx_bytes || '0';
+            document.getElementById('opt_rx_bytes').textContent = d.rx_bytes || '0';
+        });
+}, 3000);
+</script>
+
+<%+footer%>

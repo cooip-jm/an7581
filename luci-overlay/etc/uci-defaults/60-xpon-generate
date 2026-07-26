@@ -1,0 +1,83 @@
+#!/bin/sh
+# UCI defaults for xpon.ani configuration
+# Generates serial number from MAC if not already set
+
+configure_serial_number() {
+    local serial_number="$(uci -q get xpon.ani.serial_number)"
+    [ ${#serial_number} -eq 12 ] && return
+
+    # Try to get from production data (if available)
+    if [ -x /usr/sbin/fw_printenv ]; then
+        local gponsn="$(fw_printenv -n gponsn 2>/dev/null)"
+        if [ ${#gponsn} -eq 12 ]; then
+            uci set xpon.ani.serial_number="${gponsn}"
+            return
+        fi
+    fi
+
+    # Generate from MAC address: vendor_id=IOPS + last 8 hex of MAC
+    local macaddr=""
+    if [ -f /sys/class/net/eth0/address ]; then
+        macaddr=$(cat /sys/class/net/eth0/address | tr -d ':' | tr 'a-z' 'A-Z')
+    elif [ -f /sys/class/net/br-lan/address ]; then
+        macaddr=$(cat /sys/class/net/br-lan/address | tr -d ':' | tr 'a-z' 'A-Z')
+    fi
+
+    if [ ${#macaddr} -ge 12 ]; then
+        local vendor_id="IOPS"
+        local vssn="${macaddr:4:8}"
+        uci set xpon.ani.serial_number="${vendor_id}${vssn}"
+    else
+        uci set xpon.ani.serial_number="IOPS00000000"
+    fi
+}
+
+configure_ploam_password() {
+    local passwd="$(uci -q get xpon.ani.ploam_password)"
+    [ -n "$passwd" ] && return
+
+    if [ -x /usr/sbin/fw_printenv ]; then
+        local gponpswd="$(fw_printenv -n gponpswd 2>/dev/null)"
+        if [ -n "$gponpswd" ]; then
+            uci set xpon.ani.ploam_password="$gponpswd"
+            uci set xpon.ani.ploam_hexadecimalpassword=0
+        fi
+    fi
+}
+
+configure_loid() {
+    local loid="$(uci -q get xpon.ani.loid)"
+    [ -n "$loid" ] && return
+
+    if [ -x /usr/sbin/fw_printenv ]; then
+        local gponloid="$(fw_printenv -n gponloid 2>/dev/null)"
+        [ -n "$gponloid" ] && uci set xpon.ani.loid="$gponloid"
+
+        local gponloidpwd="$(fw_printenv -n gponloid_password 2>/dev/null)"
+        [ -n "$gponloidpwd" ] && uci set xpon.ani.loid_password="$gponloidpwd"
+    fi
+}
+
+# Initialize xpon UCI config if not present
+if [ -s "/etc/config/xpon" ]; then
+    if uci -q get xpon.ani >/dev/null; then
+        configure_serial_number
+        configure_ploam_password
+        configure_loid
+        uci commit xpon
+        exit 0
+    else
+        rm -f /etc/config/xpon
+    fi
+fi
+
+# Create fresh xpon config
+touch /etc/config/xpon
+uci set xpon.ani=ani
+uci set xpon.ani.enable="1"
+configure_serial_number
+configure_ploam_password
+configure_loid
+uci commit xpon
+
+exit 0

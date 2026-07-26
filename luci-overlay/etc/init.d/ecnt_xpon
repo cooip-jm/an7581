@@ -1,0 +1,178 @@
+#!/bin/sh /etc/rc.common
+
+# AN7581 PON hardware init — loads kernel modules and creates device nodes
+# Matches IOPSYS targets/airoha/base-files/etc/init.d/ecnt_xpon
+# START=11 (runs early, before network)
+
+START=11
+
+. /usr/share/libubox/jshn.sh
+. /lib/functions.sh
+
+NEED_AE_WAN=
+NEED_HSGMII_LAN=
+HSGMII_PORTS=
+PON_PHY_CONFLICT=
+
+check_2_5g_lan_port() {
+    local interface="$1"
+    case "$interface" in
+    eth[0-9] | eth[0-9][0-9])
+        NEED_HSGMII_LAN=1
+        if [ -z "$HSGMII_PORTS" ]; then
+            HSGMII_PORTS="$interface"
+        else
+            HSGMII_PORTS="$HSGMII_PORTS $interface"
+        fi
+    esac
+}
+
+boot() {
+    PROFILE_CFG=/userfs/profile.cfg
+    [ -f $PROFILE_CFG ] && . $PROFILE_CFG
+
+    # Create device nodes
+    for dev in \
+        "ipsec c 266 0" "hwnat0 c 220 0" \
+        "qdma_lan c 119 0" "qdma_wan c 120 0" \
+        "fe c 226 0" "serdes_cfg c 267 0" \
+        "pon c 190 0" "xponmap c 210 0" \
+        "ponvlan c 215 0" "ponmacfilter c 216 0" \
+        "xponigmp c 185 0" "epon_mac c 221 0" \
+        "ifc c 241 0" "bbf247 c 268 0" \
+        "ivi c 269 0" "hsgmii_lan0 c 290 0" \
+        "dpoe_service c 280 0"; do
+        local name=$(echo "$dev" | awk '{print $1}')
+        [ ! -e "/dev/$name" ] && mknod /dev/$dev
+    done
+
+    [ "$TCSUPPORT_CPU_EN7523" != "" ] && {
+        [ ! -e "/dev/gponflow" ] && mknod /dev/gponflow c 184 0
+    }
+
+    # Parse board.json for network config
+    if [ -f /etc/board.json ]; then
+        json_init
+        json_load_file /etc/board.json
+        json_select network
+        json_select wan 2>/dev/null
+        json_get_var wan_device device
+        [ "$wan_device" = "ae_wan" ] && NEED_AE_WAN=1
+        json_select ..
+        json_select lan
+        if json_is_a ports array; then
+            json_for_each_item check_2_5g_lan_port ports
+        else
+            json_get_var lan_device device
+            [ -n "$lan_device" ] && check_2_5g_lan_port "$lan_device"
+        fi
+        json_select ..
+        json_cleanup
+    fi
+
+    [ "$NEED_AE_WAN" = "1" ] && PON_PHY_CONFLICT=1
+
+    # Module loading for non-EN7523 (i.e. EN7581)
+    if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
+        [ "$PON_PHY_CONFLICT" = "" ] && {
+            insmod /lib/modules/5.4.55/xpon_hal.ko 2>/dev/null
+        }
+
+        insmod /lib/modules/5.4.55/ipsec.ko 2>/dev/null
+
+        [ "$PON_PHY_CONFLICT" = "" ] && {
+            insmod /lib/modules/5.4.55/xpon_int.ko 2>/dev/null
+        }
+
+        CHIPID=$(cat /proc/tc3162/chip_id 2>/dev/null)
+        XPONMODE=$(cat /proc/xpon_int/get_onu_mode 2>/dev/null)
+
+        if [ "$XPONMODE" = "1" ] || [[ "$XPONMODE" = "0" && "$CHIPID" = "59" ]]; then
+            BOB_MODULE_OPTS="dualbob=7570"
+            PHY_MODULE=phy_10g.ko
+            LDDA_MODULE=en7571.ko
+            XPON_MODULE=xpon.ko
+        else
+            BOB_MODULE_OPTS="dualbob=7572"
+            PHY_MODULE=phy_10g.ko
+            LDDA_MODULE=en7572.ko
+            XPON_MODULE=xpon_10g.ko
+        fi
+    else
+        onu_type=$(cat /proc/cmdline 2>/dev/null | grep -o 'onu_type=[0-9]*' | cut -d= -f2)
+        [ "$onu_type" = "1" ] || onu_type=2
+
+        BOB_MODULE_OPTS=""
+        PHY_MODULE=phy.ko
+        LDDA_MODULE=""
+        XPON_MODULE=xpon.ko
+        XPON_MODULE_OPTS="onu_type=${onu_type}"
+    fi
+
+    # BOSA — use ecnt_sys, NOT direct insmod (destroys calibration data)
+    ecnt_sys get bob ${BOB_MODULE_OPTS#*=} 2>/dev/null || \
+        insmod /lib/modules/5.4.55/econet_bob.ko ${BOB_MODULE_OPTS} 2>/dev/null
+
+    # PON PHY
+    [ "$PON_PHY_CONFLICT" = "" ] && {
+        insmod /lib/modules/5.4.55/${PHY_MODULE} 2>/dev/null
+    }
+
+    # HSGMII LAN
+    [ "$NEED_HSGMII_LAN" = "1" ] && {
+        insmod /lib/modules/5.4.55/hsgmii_lan.ko 2>/dev/null
+    }
+
+    # AE WAN or PON modules
+    if [ -f "/proc/tc3162/wan_2_5" -o "$NEED_AE_WAN" = "1" ]; then
+        :
+    else
+        [ -n "${LDDA_MODULE}" ] && {
+            [ "$TCSUPPORT_CPU_EN7523" = "" ] && {
+                insmod /lib/modules/5.4.55/an8901.ko 2>/dev/null
+            }
+            insmod /lib/modules/5.4.55/${LDDA_MODULE} 2>/dev/null
+        }
+
+        insmod /lib/modules/5.4.55/${XPON_MODULE} ${XPON_MODULE_OPTS} 2>/dev/null
+
+        [ "$TCSUPPORT_CPU_EN7581" = "" ] && {
+            insmod /lib/modules/5.4.55/xpon_int.ko 2>/dev/null
+        }
+
+        insmod /lib/modules/5.4.55/xponmap.ko 2>/dev/null
+
+        echo "uni_num 4" > /proc/gponmap/port_info 2>/dev/null
+
+        if [ "$NEED_HSGMII_LAN" = "1" ]; then
+            IDX=5
+            for HSGMII_PORT in $HSGMII_PORTS; do
+                echo "uni_num ${IDX}" > /proc/gponmap/port_info
+                echo "${IDX} dev_name ${HSGMII_PORT}" > /proc/gponmap/port_info
+                echo "${IDX} unit_type 49" > /proc/gponmap/port_info
+                IDX=$((IDX+1))
+            done
+        fi
+
+        insmod /lib/modules/5.4.55/ponvlan.ko 2>/dev/null
+
+        if [ "$TCSUPPORT_PON_SFU_HGU_HYBRID" != "" ]; then
+            insmod /lib/modules/5.4.55/gpon_igmp.ko 2>/dev/null
+        else
+            insmod /lib/modules/5.4.55/xpon_igmp.ko 2>/dev/null
+        fi
+
+        [ "$TCSUPPORT_CPU_EN7523" != "" ] && {
+            insmod /lib/modules/5.4.55/gpon_flow.ko 2>/dev/null
+        }
+
+        insmod /lib/modules/5.4.55/ponmacfilter.ko 2>/dev/null
+        insmod /lib/modules/5.4.55/dpoe_service.ko 2>/dev/null
+
+        echo 1 > /proc/sys/net/ipv4/ip_forward
+        touch /tmp/.xponconfig
+
+        ifconfig pon up 2>/dev/null
+        ifconfig omci up 2>/dev/null
+    fi
+}

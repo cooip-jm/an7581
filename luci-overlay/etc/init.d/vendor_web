@@ -1,0 +1,32 @@
+#!/bin/sh /etc/rc.common
+
+# Disable vendor thttpd web server and start uhttpd + LuCI
+
+START=18
+STOP=99
+
+start() {
+    # Kill vendor thttpd
+    killall thttpd 2>/dev/null
+    logger -t vendor_web "killed vendor thttpd"
+
+    # Backup vendor webs directory (preserve for reference)
+    [ -d /webs ] && [ ! -d /vendor_webs_bak ] && {
+        mv /webs /vendor_webs_bak 2>/dev/null
+        logger -t vendor_web "backed up vendor web to /vendor_webs_bak"
+    }
+
+    # Enable and start uhttpd (OpenWrt web server + LuCI)
+    if [ -f /etc/init.d/uhttpd ]; then
+        /etc/init.d/uhttpd enable 2>/dev/null
+        /etc/init.d/uhttpd start 2>/dev/null
+        logger -t vendor_web "uhttpd started"
+    else
+        logger -t vendor_web "WARNING: uhttpd not found"
+    fi
+}
+
+stop() {
+    /etc/init.d/uhttpd stop 2>/dev/null
+    logger -t vendor_web "uhttpd stopped"
+}
