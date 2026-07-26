@@ -1,0 +1,12 @@
+config slid
+    option enabled '1'
+    option value ''
+    option mode 'ascii'
+
+config loid
+    option enabled '0'
+    option value ''
+    option password ''
+
+config password
+    option value ''

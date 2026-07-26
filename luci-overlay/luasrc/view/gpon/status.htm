@@ -13,7 +13,7 @@
             <td><strong><%:PON Link State%></strong></td>
             <td id="pon_link_state">
                 <% if status.link_state == "Connected" or status.pon_state == "Up" then %>
-                    <span style="color:green;font-weight:bold;"><%:Connected%></span>
+                    <span style="color:green;"><%:Connected%></span>
                 <% else %>
                     <span style="color:red;"><%:Not Connected%> (<%= status.pon_state or "?" %>)</span>
                 <% end %>
@@ -53,7 +53,7 @@
         </tr>
         <tr>
             <td><strong><%:Supply Voltage%></strong></td>
-            <td id="voltage"><%= status.voltage or "N/A" %> mV</td>
+            <td id="voltage"><%= status.voltage or "N/A" %> uV</td>
         </tr>
     </table>
 </fieldset>
@@ -84,7 +84,7 @@
     <legend><%:Service Status%></legend>
     <table class="cbi-section-table" style="width:100%;">
         <tr>
-            <td><strong>omci</strong></td>
+            <td style="width:250px;"><strong>omciMgr</strong></td>
             <td>
                 <% if status.omcimgr_running then %>
                     <span style="color:green;"><%:Running%></span>
@@ -94,7 +94,7 @@
             </td>
         </tr>
         <tr>
-            <td><strong>ponmgr_cfg</strong></td>
+            <td><strong>ponmgr</strong></td>
             <td>
                 <% if status.ponmgr_running then %>
                     <span style="color:green;"><%:Running%></span>
@@ -104,22 +104,9 @@
             </td>
         </tr>
     </table>
-    <div style="margin-top:10px;">
-        <input type="button" class="cbi-button" value="<%:Restart PON daemons%>" onclick="restartService('omcimgr')" />
-    </div>
 </fieldset>
 
 <script>
-function restartService(svc) {
-    if (!confirm('Restart ' + svc + '?')) return;
-    fetch('<%=luci.dispatcher.build_url("admin/network/gpon/api/restart")%>?service=' + svc, {
-        method: 'POST'
-    }).then(function(r) { return r.json(); })
-      .then(function(d) {
-        if (d.success) location.reload();
-    });
-}
-
 var refreshTimer = setInterval(function() {
     fetch('<%=luci.dispatcher.build_url("admin/network/gpon/api/status")%>')
         .then(function(r) { return r.json(); })
@@ -128,7 +115,7 @@ var refreshTimer = setInterval(function() {
             if (d.rx_power) document.getElementById('rx_power').textContent = d.rx_power + ' dBm';
             if (d.temperature) document.getElementById('temperature').textContent = d.temperature + ' C';
             if (d.bias_current) document.getElementById('bias_current').textContent = d.bias_current + ' uA';
-            if (d.voltage) document.getElementById('voltage').textContent = d.voltage + ' mV';
+            if (d.voltage) document.getElementById('voltage').textContent = d.voltage + ' uV';
             if (d.tx_packets) document.getElementById('tx_packets').textContent = d.tx_packets;
             if (d.rx_packets) document.getElementById('rx_packets').textContent = d.rx_packets;
             if (d.tx_bytes) document.getElementById('tx_bytes').textContent = d.tx_bytes;

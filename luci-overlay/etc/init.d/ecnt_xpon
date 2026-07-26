@@ -1,13 +1,16 @@
 #!/bin/sh /etc/rc.common
 
-# AN7581 PON hardware init — loads kernel modules and creates device nodes
-# Matches IOPSYS targets/airoha/base-files/etc/init.d/ecnt_xpon
-# START=11 (runs early, before network)
+# AN7581 PON hardware init — loads kernel modules, creates device nodes,
+# starts ponmgr + omciMgr daemons, applies UCI config
+# Per LUCI_PON_DESIGN.md
 
 START=11
 
 . /usr/share/libubox/jshn.sh
 . /lib/functions.sh
+
+VENDOR_BIN="/sbin"
+VENDOR_LIB="/usr/lib"
 
 NEED_AE_WAN=
 NEED_HSGMII_LAN=
@@ -50,7 +53,7 @@ boot() {
         [ ! -e "/dev/gponflow" ] && mknod /dev/gponflow c 184 0
     }
 
-    # Parse board.json for network config
+    # Parse board.json
     if [ -f /etc/board.json ]; then
         json_init
         json_load_file /etc/board.json
@@ -72,7 +75,7 @@ boot() {
 
     [ "$NEED_AE_WAN" = "1" ] && PON_PHY_CONFLICT=1
 
-    # Module loading for non-EN7523 (i.e. EN7581)
+    # Module loading
     if [ "$TCSUPPORT_CPU_EN7523" = "" ]; then
         [ "$PON_PHY_CONFLICT" = "" ] && {
             insmod /lib/modules/5.4.55/xpon_hal.ko 2>/dev/null
@@ -109,7 +112,7 @@ boot() {
         XPON_MODULE_OPTS="onu_type=${onu_type}"
     fi
 
-    # BOSA — use ecnt_sys, NOT direct insmod (destroys calibration data)
+    # BOSA
     ecnt_sys get bob ${BOB_MODULE_OPTS#*=} 2>/dev/null || \
         insmod /lib/modules/5.4.55/econet_bob.ko ${BOB_MODULE_OPTS} 2>/dev/null
 
@@ -141,7 +144,6 @@ boot() {
         }
 
         insmod /lib/modules/5.4.55/xponmap.ko 2>/dev/null
-
         echo "uni_num 4" > /proc/gponmap/port_info 2>/dev/null
 
         if [ "$NEED_HSGMII_LAN" = "1" ]; then
@@ -175,4 +177,29 @@ boot() {
         ifconfig pon up 2>/dev/null
         ifconfig omci up 2>/dev/null
     fi
+
+    # ─── Start PON daemons ───────────────────────────────
+    export LD_LIBRARY_PATH="${VENDOR_LIB}:${LD_LIBRARY_PATH}"
+
+    # Start omciMgr
+    if [ -x "${VENDOR_BIN}/omciMgr" ]; then
+        "${VENDOR_BIN}/omciMgr" &
+        echo $! > /var/run/omcimgr.pid
+    fi
+
+    # Start ponmgr
+    if [ -x "${VENDOR_BIN}/ponmgr" ]; then
+        "${VENDOR_BIN}/ponmgr" &
+        echo $! > /var/run/ponmgr.pid
+    fi
+
+    # Wait for ponmgr to be ready
+    wait_ponmgr=0
+    while ! pidof ponmgr >/dev/null 2>&1 && [ $wait_ponmgr -lt 10 ]; do
+        sleep 1
+        wait_ponmgr=$((wait_ponmgr + 1))
+    done
+
+    # Apply UCI config to running daemons
+    [ -f /usr/libexec/pon_apply_uci.sh ] && /usr/libexec/pon_apply_uci.sh
 }

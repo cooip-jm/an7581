@@ -12,11 +12,14 @@ function index()
     entry({"admin", "network", "gpon", "config"}, cbi("gpon/gpon_config"),
           _("PON Configuration"), 20).depends("admin/network/gpon")
 
+    entry({"admin", "network", "gpon", "auth"}, cbi("gpon/gpon_auth"),
+          _("OLT Authentication"), 30).depends("admin/network/gpon")
+
     entry({"admin", "network", "gpon", "optical"}, template("gpon/optical"),
-          _("Optical Module"), 30).depends("admin/network/gpon")
+          _("Optical Module"), 40).depends("admin/network/gpon")
 
     entry({"admin", "network", "gpon", "omci"}, template("gpon/omci"),
-          _("OMCI Status"), 40).depends("admin/network/gpon")
+          _("OMCI Status"), 50).depends("admin/network/gpon")
 
     -- AJAX API endpoints
     entry({"admin", "network", "gpon", "api", "status"}, call("action_api_status"), nil)
@@ -26,8 +29,6 @@ function index()
     entry({"admin", "network", "gpon", "api", "omci"}, call("action_api_omci"), nil)
         .leaf = true
     entry({"admin", "network", "gpon", "api", "apply"}, call("action_api_apply"), nil)
-        .leaf = true
-    entry({"admin", "network", "gpon", "api", "restart"}, call("action_api_restart"), nil)
         .leaf = true
 end
 
@@ -41,11 +42,13 @@ local function helpers_run(func)
 end
 
 function action_api_status()
+    local json = require "luci.jsonc"
     local sys = require "luci.sys"
 
     local status = {}
 
     status.pon_state = helpers_run("pon_get_status") or "Unknown"
+    status.link_state = helpers_run("pon_get_link_status") or "Down"
 
     local fec = helpers_run("pon_get_fec_cfg")
     status.fec_rx = (fec and fec:match("1") or fec:match("enable")) and 1 or 0
@@ -56,12 +59,13 @@ function action_api_status()
     status.bias_current = helpers_run("pon_get_bias_current") or "N/A"
     status.voltage = helpers_run("pon_get_voltage") or "N/A"
 
-    status.omcimgr_running = sys.call("pidof omci >/dev/null 2>&1") == 0 or
-                             sys.call("pidof omciMgr >/dev/null 2>&1") == 0
-    status.ponmgr_running = sys.call("pidof ponmgr_cfg >/dev/null 2>&1") == 0 or
-                            sys.call("pidof ponmgr >/dev/null 2>&1") == 0
+    status.omcimgr_running = sys.call("pidof omciMgr >/dev/null 2>&1") == 0
+    status.ponmgr_running = sys.call("pidof ponmgr >/dev/null 2>&1") == 0
 
-    status.fec_rx_cfg = sys.exec("uci get xpon.ani.enable 2>/dev/null | tr -d '\\n'") or "1"
+    status.fec_rx_cfg = sys.exec("uci get pon.global.fec_rx 2>/dev/null | tr -d '\\n'") or "1"
+    status.fec_tx_cfg = sys.exec("uci get pon.global.fec_tx 2>/dev/null | tr -d '\\n'") or "1"
+    status.pon_mode = sys.exec("uci get pon.global.pon_mode 2>/dev/null | tr -d '\\n'") or "auto"
+    status.debug = sys.exec("uci get pon.global.event_debug 2>/dev/null | tr -d '\\n'") or "0"
 
     status.tx_packets = helpers_run("pon_get_tx_packets") or "0"
     status.rx_packets = helpers_run("pon_get_rx_packets") or "0"
@@ -73,6 +77,7 @@ function action_api_status()
 end
 
 function action_api_optical()
+    local sys = require "luci.sys"
     local optical = {}
 
     optical.tx_power = helpers_run("pon_get_tx_power_dbm") or "N/A"
@@ -94,11 +99,11 @@ function action_api_omci()
     local sys = require "luci.sys"
     local info = {}
 
-    info.state = helpers_run("pon_get_status") or "unknown"
-    info.sn = sys.exec("uci -q get xpon.ani.serial_number 2>/dev/null | tr -d '\\n'") or ""
-    info.eqid = sys.exec("uci -q get xpon.ani.equipment_id 2>/dev/null | tr -d '\\n'") or ""
-    info.omcimgr_running = sys.call("pidof omci >/dev/null 2>&1") == 0 or
-                           sys.call("pidof omciMgr >/dev/null 2>&1") == 0
+    info.state = sys.exec("cat /proc/tc3162/omci_state 2>/dev/null | tr -d '\\n'") or "unknown"
+    info.eqid = sys.exec("cat /proc/tc3162/omci_eqid 2>/dev/null | tr -d '\\n'") or "N/A"
+    info.sn = sys.exec("cat /proc/tc3162/omci_sn 2>/dev/null | tr -d '\\n'") or "N/A"
+    info.omcimgr_pid = sys.exec("cat /var/run/omcimgr.pid 2>/dev/null | tr -d '\\n'") or ""
+    info.omcimgr_running = sys.call("pidof omciMgr >/dev/null 2>&1") == 0
 
     luci.http.prepare_content("application/json")
     luci.http.write_json(info)
@@ -111,59 +116,39 @@ function action_api_apply()
     local raw = luci.http.content()
     local params = json.parse(raw) or {}
 
-    if params.serial_number then
+    if params.fec_rx then
         sys.call(string.format(
-            "uci set xpon.ani.serial_number='%s' && uci commit xpon",
-            params.serial_number))
+            ". %s && pon_set_fec_cfg %s",
+            HELPERS, params.fec_rx))
+        sys.call(string.format(
+            "uci set pon.global.fec_rx='%s' && uci commit pon",
+            params.fec_rx))
     end
 
-    if params.ploam_password then
-        local hex = params.ploam_hexadecimalpassword or "0"
+    if params.debug then
         sys.call(string.format(
-            "uci set xpon.ani.ploam_password='%s' && uci set xpon.ani.ploam_hexadecimalpassword='%s' && uci commit xpon",
-            params.ploam_password, hex))
+            ". %s && pon_set_dbg_level %s",
+            HELPERS, params.debug == "1" and "enable" or "disable"))
+        sys.call(string.format(
+            "uci set pon.global.event_debug='%s' && uci commit pon",
+            params.debug))
     end
 
-    if params.equipment_id then
+    if params.pm_flag then
         sys.call(string.format(
-            "uci set xpon.ani.equipment_id='%s' && uci commit xpon",
-            params.equipment_id))
+            ". %s && omci_set_pm_flag %s",
+            HELPERS, params.pm_flag))
+        sys.call(string.format(
+            "uci set pon.omci.pm_flag='%s' && uci commit pon",
+            params.pm_flag))
     end
 
-    if params.loid then
+    if params.slid then
         sys.call(string.format(
-            "uci set xpon.ani.loid='%s' && uci commit xpon",
-            params.loid))
+            ". %s && pon_set_ont_password '%s'",
+            HELPERS, params.slid))
     end
-
-    if params.loid_password then
-        sys.call(string.format(
-            "uci set xpon.ani.loid_password='%s' && uci commit xpon",
-            params.loid_password))
-    end
-
-    -- Restart xpon service to apply changes
-    sys.call("/etc/init.d/xpon restart &")
 
     luci.http.prepare_content("application/json")
     luci.http.write_json({ success = true })
-end
-
-function action_api_restart()
-    local sys = require "luci.sys"
-    local service = luci.http.formvalue("service")
-
-    if service == "omcimgr" then
-        sys.call("/etc/init.d/xpon restart &")
-        luci.http.prepare_content("application/json")
-        luci.http.write_json({ success = true, service = "xpon" })
-    elseif service == "ponmgr" then
-        sys.call("/etc/init.d/xpon restart &")
-        luci.http.prepare_content("application/json")
-        luci.http.write_json({ success = true, service = "xpon" })
-    else
-        luci.http.status(400)
-        luci.http.prepare_content("application/json")
-        luci.http.write_json({ error = "unknown service" })
-    end
 end

@@ -1,116 +1,108 @@
 #!/bin/sh
 # PON helper functions for LuCI integration on AN7581
-# Wraps vendor CLI tools to match IOPSYS ponmngr architecture
-# Key tool: omcicfgCmd (part of omci/bbf247 package)
+# Wraps vendor CLI tools: ponmgr, omcli, hcfgtool, ritool
+# Per LUCI_PON_DESIGN.md
 
-export LD_LIBRARY_PATH="/usr/lib:/usr/lib64:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="/usr/lib:${LD_LIBRARY_PATH}"
+PONMGR="/sbin/ponmgr"
+OMCLI="/sbin/omciMgr"
+HCFGTOOL="/usr/bin/hcfgtool"
+RITOOL="/usr/bin/ritool"
 
-# ─── OMCI Configuration Commands ────────────────────────
-# These are the PRIMARY way to set ONT identity parameters
-# omcicfgCmd talks to the running omci daemon
-
-omcicfgCmd() {
-    # Try /userfs first (IOPSYS standard), then /usr/bin, then /sbin
-    for bin in /userfs/bin/omcicfgCmd /usr/bin/omcicfgCmd /sbin/omcicfgCmd; do
-        [ -x "$bin" ] && "$bin" "$@" && return $?
-    done
-    # Fallback: the vendor omci binary may have omcicfgCmd as subcommand
-    for bin in /userfs/bin/omci /usr/bin/omci /sbin/omci; do
-        [ -x "$bin" ] && "$bin" omcicfgCmd "$@" && return $?
-    done
-    logger -t pon-helpers "ERROR: omcicfgCmd not found"
-    return 1
-}
-
-# ─── Serial Number ──────────────────────────────────────
-
-set_serial_number() {
-    local vendor_id="$1"
-    local vssn="$2"
-    [ -z "$vendor_id" ] && return 1
-    [ -z "$vssn" ] && return 1
-    omcicfgCmd set vendorId "${vendor_id}"
-    omcicfgCmd set sn "${vendor_id}${vssn}"
-}
-
-get_serial_number() {
-    uci -q get xpon.ani.serial_number 2>/dev/null
-}
-
-# ─── PLOAM Password ─────────────────────────────────────
-
-set_ploam_password() {
-    local passwd="$1"
-    local hex="$2"
-    [ -z "$passwd" ] && return 1
-    if [ -z "$hex" -o "$hex" = "0" ]; then
-        omcicfgCmd set passwdAscii "${passwd}"
-    else
-        omcicfgCmd set passwdHex "${passwd}"
-    fi
-}
-
-# ─── Equipment ID ───────────────────────────────────────
-
-set_equipment_id() {
-    local eqid="$1"
-    [ -z "${eqid}" ] && return 0
-    omcicfgCmd set equipmentId "${eqid}"
-}
-
-# ─── LOID Authentication ────────────────────────────────
-
-set_loid_authentication() {
-    local loid="$1"
-    local loid_pwd="$2"
-    [ -z "${loid}" ] && return 0
-    omcicfgCmd set loid "${loid}"
-    [ -n "${loid_pwd}" ] && omcicfgCmd set loidPasswd "${loid_pwd}"
-}
-
-# ─── ONU Version ────────────────────────────────────────
-
-set_onu_version() {
-    local onu_version="$1"
-    [ -z "${onu_version}" ] && return 0
-    omcicfgCmd set onuVersion "${onu_version}"
-}
-
-# ─── Hardware Info (via ritool/hcfgtool) ────────────────
+# ─── Hardware Info ───────────────────────────────────────
 
 pon_get_board_id() {
-    ritool get BoardID 2>/dev/null
+    $RITOOL get BoardID 2>/dev/null | awk -F ':' '{print $2}' | tr -d ' '
 }
 
 pon_get_part_number() {
-    ritool get PartNumber 2>/dev/null
+    $RITOOL get PartNumber 2>/dev/null | awk -F ':' '{print $2}' | tr -d ' '
+}
+
+pon_get_operator_id() {
+    $RITOOL get OperatorID 2>/dev/null | grep OperatorID | awk '{print substr($2,12)}'
 }
 
 pon_get_bosa_chip() {
-    hcfgtool get Bosa.Chip.Name 2>/dev/null
+    $HCFGTOOL get Bosa.Chip.Name 2>/dev/null
 }
 
-# ─── Optical Module (from proc) ─────────────────────────
-
-pon_get_tx_power_raw() {
-    cat /proc/tc3162/pon_txpower 2>/dev/null
+pon_get_tx_disable_pin() {
+    $HCFGTOOL get Pon.TxDisable.Pin 2>/dev/null
 }
 
-pon_get_rx_power_raw() {
-    cat /proc/tc3162/pon_rxpower 2>/dev/null
+pon_get_tx_enable_pin() {
+    $HCFGTOOL get Pon.TxPowerEnable.Pin 2>/dev/null
 }
 
-pon_get_temperature_raw() {
-    cat /proc/tc3162/pon_temp 2>/dev/null
+# ─── PON Manager Commands ────────────────────────────────
+
+pon_get_status() {
+    $PONMGR gpon get status 2>/dev/null
 }
 
-pon_get_bias_current_raw() {
-    cat /proc/tc3162/pon_bias 2>/dev/null
+pon_get_link_status() {
+    $PONMGR gpon get sys_link_cfg 2>/dev/null
 }
 
-pon_get_voltage_raw() {
-    cat /proc/tc3162/pon_voltage 2>/dev/null
+pon_set_link_cfg() {
+    local val="$1"
+    $PONMGR gpon set sys_link_cfg "$val" 2>/dev/null
 }
+
+pon_get_fec_cfg() {
+    $PONMGR gpon get rx_fec_cfg 2>/dev/null
+}
+
+pon_set_fec_cfg() {
+    local val="$1"
+    $PONMGR gpon set rx_fec_cfg "$val" 2>/dev/null
+}
+
+pon_set_dbg_level() {
+    local val="$1"  # enable|disable
+    $PONMGR gpon set dbg_level "$val" 2>/dev/null
+}
+
+pon_set_init_report() {
+    local val="$1"  # 0|1
+    $PONMGR gpon set event_ctrl init_report_o1 "$val" 2>/dev/null
+}
+
+# ─── SLID / Password ─────────────────────────────────────
+
+pon_set_slid() {
+    local value="$1"
+    local mode="$2"  # ascii|hex
+
+    if [ "$mode" = "hex" ]; then
+        echo "$value" | grep -qE '^[0-9a-fA-F]{0,20}$' || return 1
+    else
+        [ ${#value} -le 10 ] || return 1
+    fi
+
+    $PONMGR gpon set ont_password "$value" 2>/dev/null
+}
+
+# ─── LOID ────────────────────────────────────────────────
+
+pon_set_loid() {
+    local loid="$1"
+    local password="$2"
+
+    [ ${#loid} -le 24 ] || return 1
+    [ ${#password} -le 12 ] || return 1
+
+    $OMCLI setLoid "$loid" "$password" 2>/dev/null
+}
+
+# ─── Optical Module (from proc) ──────────────────────────
+
+pon_get_tx_power_raw() { cat /proc/tc3162/pon_txpower 2>/dev/null; }
+pon_get_rx_power_raw() { cat /proc/tc3162/pon_rxpower 2>/dev/null; }
+pon_get_temperature_raw() { cat /proc/tc3162/pon_temp 2>/dev/null; }
+pon_get_bias_current_raw() { cat /proc/tc3162/pon_bias 2>/dev/null; }
+pon_get_voltage_raw() { cat /proc/tc3162/pon_voltage 2>/dev/null; }
 
 pon_raw_to_dbm() {
     local raw="$1"
@@ -152,47 +144,71 @@ pon_get_rx_packets() { cat /proc/tc3162/pon_rxpkts 2>/dev/null || echo "0"; }
 pon_get_tx_bytes()   { cat /proc/tc3162/pon_txbytes 2>/dev/null || echo "0"; }
 pon_get_rx_bytes()   { cat /proc/tc3162/pon_rxbytes 2>/dev/null || echo "0"; }
 
-# ─── PON Status ─────────────────────────────────────────
+# ─── OMCI ────────────────────────────────────────────────
 
-pon_get_status() {
-    cat /proc/tc3162/pon_state 2>/dev/null || \
-    cat /sys/class/ont/state 2>/dev/null || \
-    echo "Unknown"
+omci_set_pm_flag() {
+    local val="$1"
+    $OMCLI setPmFlag "$val" 2>/dev/null
 }
 
-pon_omcimgr_running() { pidof omci >/dev/null 2>&1 || pidof omciMgr >/dev/null 2>&1; }
-pon_ponmgr_running()  { pidof ponmgr_cfg >/dev/null 2>&1 || pidof ponmgr >/dev/null 2>&1; }
+# ─── Process Status ──────────────────────────────────────
 
-# ─── Apply UCI xpon.ani config to running daemons ───────
+pon_omcimgr_running() { pidof omciMgr >/dev/null 2>&1; }
+pon_ponmgr_running()  { pidof ponmgr >/dev/null 2>&1; }
 
-pon_apply_uci_config() {
-    [ "$(uci -q get xpon.ani.enable)" = "1" ] || return
+# ─── Full Status JSON ────────────────────────────────────
 
-    # Serial number
-    local serial_number="$(uci -q get xpon.ani.serial_number)"
-    if [ ${#serial_number} -eq 12 ]; then
-        local vendor_id="${serial_number:0:4}"
-        local vssn="${serial_number:4:8}"
-        set_serial_number "$vendor_id" "$vssn"
-    fi
+pon_get_full_status() {
+    local status_raw=$(pon_get_status)
+    local fec_raw=$(pon_get_fec_cfg)
 
-    # PLOAM password
-    local passwd="$(uci -q get xpon.ani.ploam_password)"
-    local hex="$(uci -q get xpon.ani.ploam_hexadecimalpassword)"
-    [ -n "$passwd" ] && set_ploam_password "$passwd" "$hex"
+    local pon_state="Unknown"
+    local link_state="Down"
+    local fec=0
 
-    # Equipment ID
-    local eqid="$(uci -q get xpon.ani.equipment_id)"
-    set_equipment_id "$eqid"
+    case "$status_raw" in
+        *Up*)           pon_state="Up"; link_state="Connected" ;;
+        *Initializing*) pon_state="Initializing"; link_state="Not connected" ;;
+        *EstablishingLink*) pon_state="EstablishingLink"; link_state="Not connected" ;;
+        *NoSignal*)     pon_state="NoSignal"; link_state="No signal" ;;
+        *LowSignalPower*) pon_state="LowSignalPower"; link_state="Low signal" ;;
+    esac
 
-    # LOID
-    local loid="$(uci -q get xpon.ani.loid)"
-    local loid_pwd="$(uci -q get xpon.ani.loid_password)"
-    set_loid_authentication "$loid" "$loid_pwd"
+    case "$fec_raw" in
+        *1*|*enable*) fec=1 ;;
+        *) fec=0 ;;
+    esac
 
-    # ONU version
-    local onu_version="$(uci -q get xpon.ani.onu_version)"
-    set_onu_version "$onu_version"
+    cat <<EOF
+{
+    "link_state": "$link_state",
+    "pon_state": "$pon_state",
+    "fec_rx": $fec,
+    "tx_power": "$(pon_get_tx_power_dbm)",
+    "rx_power": "$(pon_get_rx_power_dbm)",
+    "temperature": "$(pon_get_temperature)",
+    "bias_current": "$(pon_get_bias_current)",
+    "voltage": "$(pon_get_voltage)",
+    "omcimgr_running": $(pon_omcimgr_running && echo 1 || echo 0),
+    "ponmgr_running": $(pon_ponmgr_running && echo 1 || echo 0)
+}
+EOF
+}
 
-    logger -t pon-helpers "UCI xpon.ani configuration applied"
+# ─── Apply UCI Config ────────────────────────────────────
+
+pon_apply_config() {
+    local fec_rx=$(uci get pon.global.fec_rx 2>/dev/null)
+    local fec_tx=$(uci get pon.global.fec_tx 2>/dev/null)
+    local debug=$(uci get pon.global.event_debug 2>/dev/null)
+    local init_rpt=$(uci get pon.global.init_report 2>/dev/null)
+    local slid_val=$(uci get pon_auth.slid.value 2>/dev/null)
+    local slid_mode=$(uci get pon_auth.slid.mode 2>/dev/null)
+
+    [ -n "$fec_rx" ] && pon_set_fec_cfg "$fec_rx"
+    [ -n "$debug" ] && {
+        [ "$debug" = "1" ] && pon_set_dbg_level enable || pon_set_dbg_level disable
+    }
+    [ -n "$init_rpt" ] && pon_set_init_report "$init_rpt"
+    [ -n "$slid_val" ] && pon_set_slid "$slid_val" "${slid_mode:-ascii}"
 }
