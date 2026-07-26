@@ -1,12 +1,13 @@
 'use strict';
+'require baseclass';
 'require form';
 'require uci';
 
-return L.Class.extend({
+return baseclass.extend({
 	title: _('OLT Authentication'),
 
 	load: function() {
-		return uci.load('pon_auth');
+		return L.resolveDefault(uci.load('pon_auth'), null);
 	},
 
 	render: function() {

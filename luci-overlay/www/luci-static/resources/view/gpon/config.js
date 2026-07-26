@@ -1,20 +1,15 @@
 'use strict';
+'require baseclass';
 'require form';
 'require uci';
-'require rpc';
 
-var callApplyPon = rpc.declare({
-	object: 'file',
-	method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh && pon_apply_config'] },
-	expect: { '': {} }
-});
-
-return L.Class.extend({
+return baseclass.extend({
 	title: _('PON Configuration'),
 
 	load: function() {
-		return uci.load('pon');
+		return L.resolveDefault(uci.load('pon'), null).then(function() {
+			return L.resolveDefault(uci.load('pon_auth'), null);
+		});
 	},
 
 	render: function() {
