@@ -1,0 +1,250 @@
+name: Build AN7581 OpenWrt Firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [40md]
+    paths:
+      - 'luci-overlay/**'
+      - '.github/workflows/build.yml'
+
+env:
+  OPENWRT_DIR: openwrt
+  TARGET: airoha
+  SUBTARGET: an7581
+  DEVICE: nokia_xg-040g-md
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo apt-get clean
+          df -h
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils \
+            bison build-essential bzip2 ccache cmake cpio curl \
+            device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib \
+            g++-multilib git gnutls-dev gperf haveged help2man intltool \
+            lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev \
+            libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev \
+            libncursesw5-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool libz-dev lrzsz mkisofs msmtp nano ninja-build p7zip \
+            p7zip-full patch pkgconf python2.7 python3 python3-pip \
+            python3-ply python3-pyelftools python3-setuptools qemu-utils \
+            rsync scons squashfs-tools subversion swig texinfo \
+            uglifyjs unzip upx-ucl vim wget xmlto xxd zlib1g-dev
+
+      - name: Clone OpenWrt
+        run: |
+          git clone --depth 1 https://git.openwrt.org/openwrt/openwrt.git ${{ env.OPENWRT_DIR }}
+          cd ${{ env.OPENWRT_DIR }}
+          git log --oneline -1
+
+      - name: Update and install feeds
+        working-directory: ${{ env.OPENWRT_DIR }}
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Add IOPSYS targets feed
+        working-directory: ${{ env.OPENWRT_DIR }}
+        run: |
+          # Add IOPSYS targets feed for AN7581 DTS and board support
+          mkdir -p feeds/custom
+          cat > feeds/custom.conf <<'EOF'
+          src-git targets https://dev.iopsys.eu/feed/targets.git;devel
+          EOF
+          # If IOPSYS feed is not accessible, use our local DTS
+          ./scripts/feeds update targets 2>/dev/null || {
+            echo "IOPSYS feed unavailable, using local DTS"
+            rm -f feeds/custom.conf
+            mkdir -p target/linux/airoha/dts
+            cp ../dts/en7581*.dts* target/linux/airoha/dts/ 2>/dev/null || true
+            cp ../dts/xg-040G-md.dts target/linux/airoha/dts/ 2>/dev/null || true
+          }
+          ./scripts/feeds install -a 2>/dev/null || true
+
+      - name: Configure OpenWrt
+        working-directory: ${{ env.OPENWRT_DIR }}
+        run: |
+          # Start with AN7581 target defaults
+          cat > .config <<'EOF'
+          CONFIG_TARGET_airoha=y
+          CONFIG_TARGET_airoha_an7581=y
+          CONFIG_TARGET_airoha_an7581_DEVICE_nokia_xg-040g-md=y
+
+          # LuCI
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-base=y
+          CONFIG_PACKAGE_luci-lib-ipkg=y
+          CONFIG_PACKAGE_luci-compat=y
+          CONFIG_PACKAGE_luci-app-firewall=y
+          CONFIG_PACKAGE_luci-app-network=y
+
+          # Lua
+          CONFIG_PACKAGE_lua=y
+          CONFIG_PACKAGE_luci-lib-nixio=y
+          CONFIG_PACKAGE_luci-lib-jsonc=y
+
+          # Web server
+          CONFIG_PACKAGE_uhttpd=y
+          CONFIG_PACKAGE_uhttpd-mod-ubus=y
+
+          # Shell utils
+          CONFIG_PACKAGE_jshn=y
+          CONFIG_PACKAGE_jsonfilter=y
+          CONFIG_PACKAGEuci=y
+
+          # Busybox
+          CONFIG_PACKAGE_busybox=y
+          CONFIG_PACKAGE_busybox-defaults=y
+
+          # Kernel modules - PON support
+          CONFIG_PACKAGE_kmod-fs-nfs=y
+          CONFIG_PACKAGE_kmod-usb-storage=y
+
+          # Disable unnecessary packages to speed up build
+          CONFIG_PACKAGE_dnsmasq=n
+          CONFIG_PACKAGE_ppp=n
+          CONFIG_PACKAGE_pppoe=n
+          CONFIG_PACKAGE_kmod-iptunnel6=n
+          EOF
+          make defconfig
+
+      - name: Download sources
+        working-directory: ${{ env.OPENWRT_DIR }}
+        run: |
+          make download -j$(nproc)
+          find dl/ -size -1024c -exec ls -l {} \;
+          find dl/ -size -1024c -delete
+
+      - name: Compile firmware
+        working-directory: ${{ env.OPENWrt_DIR }}
+        run: |
+          make -j$(nproc) || make -j1 V=s
+          echo "Build complete"
+          ls -la bin/targets/airoha/an7581/ 2>/dev/null || \
+          ls -la bin/targets/ 2>/dev/null || \
+          echo "Checking build output..."
+
+      - name: Extract rootfs for LXC testing
+        run: |
+          mkdir -p output/rootfs
+          # Find the built firmware/rootfs
+          FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d -name "nokia_xg-040g-md" 2>/dev/null | head -1)
+          if [ -z "$FIRMWARE_DIR" ]; then
+            FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d | head -1)
+          fi
+          echo "Firmware dir: $FIRMWARE_DIR"
+          ls -la "$FIRMWARE_DIR/" 2>/dev/null || true
+
+          # Extract rootfs from combined image if available
+          COMBINED=$(find "$FIRMWARE_DIR" -name "*combined*" -o -name "*rootfs*" 2>/dev/null | head -1)
+          if [ -n "$COMBINED" ]; then
+            echo "Found: $COMBINED"
+            # For ext4 images, we can mount and extract
+            if file "$COMBINED" | grep -q "ext4\|filesystem"; then
+              sudo mkdir -p /mnt/rootfs
+              sudo mount -o loop "$COMBINED" /mnt/rootfs 2>/dev/null && {
+                sudo cp -a /mnt/rootfs/* output/rootfs/
+                sudo umount /mnt/rootfs
+              } || {
+                # Try unsquashfs
+                sudo unsquashfs -d output/rootfs "$COMBINED" 2>/dev/null || true
+              }
+            fi
+          fi
+
+          # If rootfs extraction failed, create minimal test rootfs from build output
+          if [ ! -f output/rootfs/etc/config/system ]; then
+            echo "Creating rootfs from build artifacts..."
+            # Use the image builder output or compile a minimal rootfs
+            STAGING_DIR="${{ env.OPENWRT_DIR }}/staging_dir/target-aarch64_cortex-a53_musl"
+            if [ -d "$STAGING_DIR" ]; then
+              # Copy essential files from staging
+              cp -a "$STAGING_DIR/rootfs/"* output/rootfs/ 2>/dev/null || true
+            fi
+          fi
+
+          # Overlay our LuCI files
+          cp -a luci-overlay/* output/rootfs/ 2>/dev/null || true
+
+          # Create tarball
+          cd output
+          tar czf rootfs.tar.gz -C rootfs .
+          echo "rootfs.tar.gz created: $(ls -lh rootfs.tar.gz | awk '{print $5}')"
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p output/release
+          FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d | head -1)
+
+          # Copy firmware images
+          if [ -d "$FIRMWARE_DIR" ]; then
+            cp "$FIRMWARE_DIR"/*.bin "$FIRMWARE_DIR"/*.img.gz "$FIRMWARE_DIR"/*.itb \
+               "$FIRMWARE_DIR"/*.squashfs 2>/dev/null output/release/ || true
+          fi
+
+          # Copy rootfs tarball
+          cp output/rootfs.tar.gz output/release/ 2>/dev/null || true
+
+          # Copy our overlay
+          cp output/luci-overlay.tar.gz output/release/ 2>/dev/null || true
+
+          # Copy install script
+          cp output/install_overlay.sh output/release/ 2>/dev/null || true
+
+          echo "=== Release artifacts ==="
+          ls -lh output/release/
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: an7581-firmware
+          path: output/release/
+          retention-days: 30
+
+      - name: Create Release
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "AN7581 Build #${{ github.run_number }}"
+          body: |
+            ## Nokia XG-040G-MD (AN7581) OpenWrt Build
+
+            ### Files
+            - `rootfs.tar.gz` — Root filesystem for LXC testing on ARM64
+            - `*.bin` / `*.img.gz` — Firmware for device flashing
+            - `luci-overlay.tar.gz` — LuCI overlay for vendor rootfs
+            - `install_overlay.sh` — Overlay installation script
+
+            ### LXC Testing
+            ```bash
+            # On ARM64 device with LXC
+            tar xzf rootfs.tar.gz -C /var/lib/lxc/an7581/rootfs
+            ```
+
+            ### Device Installation
+            ```bash
+            # Upload to device via scp, then:
+            tar xzf luci-overlay.tar.gz -C /
+            /etc/init.d/vendor_web start
+            ```
+          files: output/release/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
