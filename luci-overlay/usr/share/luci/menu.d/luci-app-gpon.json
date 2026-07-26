@@ -1,0 +1,59 @@
+{
+	"admin/network/gpon": {
+		"title": "PON Management",
+		"order": 60,
+		"action": {
+			"type": "firstchild",
+			"preferred": "status",
+			"recurse": true
+		},
+		"depends": {
+			"acl": [ "luci-app-gpon" ]
+		}
+	},
+
+	"admin/network/gpon/status": {
+		"title": "PON Status",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "gpon/status"
+		}
+	},
+
+	"admin/network/gpon/config": {
+		"title": "PON Configuration",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "gpon/config"
+		}
+	},
+
+	"admin/network/gpon/auth": {
+		"title": "OLT Authentication",
+		"order": 30,
+		"action": {
+			"type": "view",
+			"path": "gpon/auth"
+		}
+	},
+
+	"admin/network/gpon/optical": {
+		"title": "Optical Module",
+		"order": 40,
+		"action": {
+			"type": "view",
+			"path": "gpon/optical"
+		}
+	},
+
+	"admin/network/gpon/omci": {
+		"title": "OMCI Status",
+		"order": 50,
+		"action": {
+			"type": "view",
+			"path": "gpon/omci"
+		}
+	}
+}
