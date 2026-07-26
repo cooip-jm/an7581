@@ -69,6 +69,18 @@ pon_set_init_report() {
     $PONMGR gpon set event_ctrl init_report_o1 "$val" 2>/dev/null
 }
 
+# ─── Serial Number (SN) ───────────────────────────────────
+
+pon_set_sn() {
+    local vendor_id="$1"
+    local vssd="$2"
+
+    [ ${#vendor_id} -eq 4 ] || return 1
+    [ ${#vssd} -eq 8 ] || return 1
+
+    $PONMGR gpon set sn "$vendor_id" "$vssd" 2>/dev/null
+}
+
 # ─── SLID / Password ─────────────────────────────────────
 
 pon_set_slid() {
@@ -202,13 +214,22 @@ pon_apply_config() {
     local fec_tx=$(uci get pon.global.fec_tx 2>/dev/null)
     local debug=$(uci get pon.global.event_debug 2>/dev/null)
     local init_rpt=$(uci get pon.global.init_report 2>/dev/null)
+    local slid_en=$(uci get pon_auth.slid.enabled 2>/dev/null)
+    local slid_dis=$(uci get pon_auth.slid.password_disabled 2>/dev/null)
     local slid_val=$(uci get pon_auth.slid.value 2>/dev/null)
     local slid_mode=$(uci get pon_auth.slid.mode 2>/dev/null)
+    local sn_vid=$(uci get pon_auth.sn.vendor_id 2>/dev/null)
+    local sn_vssd=$(uci get pon_auth.sn.vssd 2>/dev/null)
 
     [ -n "$fec_rx" ] && pon_set_fec_cfg "$fec_rx"
     [ -n "$debug" ] && {
         [ "$debug" = "1" ] && pon_set_dbg_level enable || pon_set_dbg_level disable
     }
     [ -n "$init_rpt" ] && pon_set_init_report "$init_rpt"
-    [ -n "$slid_val" ] && pon_set_slid "$slid_val" "${slid_mode:-ascii}"
+
+    if [ "$slid_en" = "1" ] && [ "$slid_dis" != "1" ] && [ -n "$slid_val" ]; then
+        pon_set_slid "$slid_val" "${slid_mode:-ascii}"
+    fi
+
+    [ -n "$sn_vid" ] && [ -n "$sn_vssd" ] && pon_set_sn "$sn_vid" "$sn_vssd"
 }

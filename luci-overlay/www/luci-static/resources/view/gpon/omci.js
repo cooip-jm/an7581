@@ -38,7 +38,7 @@ return view.extend({
 	render: function(data) {
 		var vals = data || ['N/A', 'N/A', 'N/A', 'stopped'];
 		for (var i = 0; i < vals.length; i++)
-			vals[i] = (vals[i] || '').trim();
+			vals[i] = String(vals[i] || '').trim();
 
 		var running = vals[3] === 'running';
 

@@ -44,12 +44,21 @@ init_rpt=$(uci get pon.global.init_report 2>/dev/null)
 [ -n "$init_rpt" ] && pon_set_init_report "$init_rpt"
 
 # Apply SLID/password
+slid_en=$(uci get pon_auth.slid.enabled 2>/dev/null)
+slid_pwd_dis=$(uci get pon_auth.slid.password_disabled 2>/dev/null)
 slid_val=$(uci get pon_auth.slid.value 2>/dev/null)
 slid_mode=$(uci get pon_auth.slid.mode 2>/dev/null)
-slid_en=$(uci get pon_auth.slid.enabled 2>/dev/null)
-if [ "$slid_en" = "1" ] && [ -n "$slid_val" ]; then
+if [ "$slid_en" = "1" ] && [ "$slid_pwd_dis" != "1" ] && [ -n "$slid_val" ]; then
     pon_set_slid "$slid_val" "${slid_mode:-ascii}"
     logger -t airoha-pon "Applied SLID (mode=${slid_mode:-ascii})"
+fi
+
+# Apply SN (serial number)
+sn_vid=$(uci get pon_auth.sn.vendor_id 2>/dev/null)
+sn_vssd=$(uci get pon_auth.sn.vssd 2>/dev/null)
+if [ -n "$sn_vid" ] && [ -n "$sn_vssd" ]; then
+    pon_set_sn "$sn_vid" "$sn_vssd"
+    logger -t airoha-pon "Applied SN: ${sn_vid}${sn_vssd}"
 fi
 
 # Apply LOID

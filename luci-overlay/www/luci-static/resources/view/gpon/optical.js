@@ -68,7 +68,7 @@ return view.extend({
 	render: function(data) {
 		var vals = data || [];
 		for (var i = 0; i < vals.length; i++)
-			vals[i] = (vals[i] || '').trim() || 'N/A';
+			vals[i] = String(vals[i] || '').trim() || 'N/A';
 
 		var fields = [
 			[_('TX Power'), vals[0] !== 'N/A' ? vals[0] + ' dBm' : 'N/A'],

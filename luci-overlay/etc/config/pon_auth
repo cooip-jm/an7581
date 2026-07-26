@@ -1,5 +1,10 @@
+config sn
+    option vendor_id ''
+    option vssd ''
+
 config slid
     option enabled '1'
+    option password_disabled '0'
     option value ''
     option mode 'ascii'
 
