@@ -21,4 +21,6 @@ config omci
 
 config pon_vlan
     option enabled '0'
-    option mode 'tag'
+    option mode 'transparent'
+    option vid ''
+    option priority '0'

@@ -163,6 +163,44 @@ omci_set_pm_flag() {
     $OMCLI setPmFlag "$val" 2>/dev/null
 }
 
+# ─── PON VLAN ───────────────────────────────────────────
+
+pon_set_pon_vlan() {
+    local enabled="$1"   # 0|1
+    local mode="$2"      # tag|transparent|translate
+    local vid="$3"       # 1-4094
+    local priority="$4"  # 0-7
+
+    if [ "$enabled" = "1" ]; then
+        case "$mode" in
+            tag)
+                echo "vlan_mode 1" > /proc/gponmap/pon_vlan 2>/dev/null
+                [ -n "$vid" ] && echo "vlan_id $vid" > /proc/gponmap/pon_vlan 2>/dev/null
+                [ -n "$priority" ] && echo "vlan_priority $priority" > /proc/gponmap/pon_vlan 2>/dev/null
+                ;;
+            transparent)
+                echo "vlan_mode 0" > /proc/gponmap/pon_vlan 2>/dev/null
+                ;;
+            translate)
+                echo "vlan_mode 2" > /proc/gponmap/pon_vlan 2>/dev/null
+                [ -n "$vid" ] && echo "vlan_id $vid" > /proc/gponmap/pon_vlan 2>/dev/null
+                [ -n "$priority" ] && echo "vlan_priority $priority" > /proc/gponmap/pon_vlan 2>/dev/null
+                ;;
+        esac
+    else
+        echo "vlan_mode 0" > /proc/gponmap/pon_vlan 2>/dev/null
+    fi
+}
+
+pon_get_pon_vlan_mode() {
+    local raw=$(cat /proc/gponmap/pon_vlan 2>/dev/null)
+    case "$raw" in
+        *vlan_mode\ 1*) echo "tag" ;;
+        *vlan_mode\ 2*) echo "translate" ;;
+        *) echo "transparent" ;;
+    esac
+}
+
 # ─── Process Status ──────────────────────────────────────
 
 pon_omcimgr_running() { pidof omciMgr >/dev/null 2>&1; }
@@ -220,6 +258,10 @@ pon_apply_config() {
     local slid_mode=$(uci get pon_auth.slid.mode 2>/dev/null)
     local sn_vid=$(uci get pon_auth.sn.vendor_id 2>/dev/null)
     local sn_vssd=$(uci get pon_auth.sn.vssd 2>/dev/null)
+    local vlan_en=$(uci get pon.pon_vlan.enabled 2>/dev/null)
+    local vlan_mode=$(uci get pon.pon_vlan.mode 2>/dev/null)
+    local vlan_id=$(uci get pon.pon_vlan.vid 2>/dev/null)
+    local vlan_prio=$(uci get pon.pon_vlan.priority 2>/dev/null)
 
     [ -n "$fec_rx" ] && pon_set_fec_cfg "$fec_rx"
     [ -n "$debug" ] && {
@@ -232,4 +274,6 @@ pon_apply_config() {
     fi
 
     [ -n "$sn_vid" ] && [ -n "$sn_vssd" ] && pon_set_sn "$sn_vid" "$sn_vssd"
+
+    pon_set_pon_vlan "${vlan_en:-0}" "${vlan_mode:-transparent}" "$vlan_id" "$vlan_prio"
 }

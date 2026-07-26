@@ -82,6 +82,36 @@ return view.extend({
 		o.value('1', _('Enabled'));
 		o.default = '0';
 
+		/* ── PON VLAN ────────────────────────────────────── */
+		s = m.section(form.TypedSection, 'pon_vlan', _('PON VLAN'));
+		s.anonymous = true;
+		s.addremove = false;
+
+		o = s.option(form.Flag, 'enabled', _('Enable VLAN Tagging'),
+			_('Configure VLAN tag handling on the PON interface.'));
+		o.default = '0';
+		o.rmempty = false;
+
+		o = s.option(form.ListValue, 'mode', _('VLAN Mode'));
+		o.value('transparent', _('Transparent (no VLAN processing)'));
+		o.value('tag', _('Tag (add/replace VLAN tag)'));
+		o.value('translate', _('Translate (rewrite VLAN tag)'));
+		o.default = 'transparent';
+		o.rmempty = false;
+
+		o = s.option(form.Value, 'vid', _('VLAN ID'),
+			_('VLAN identifier (1-4094). Required for tag and translate modes.'));
+		o.datatype = 'range(1,4094)';
+		o.rmempty = true;
+		o.placeholder = '100';
+
+		o = s.option(form.ListValue, 'priority', _('VLAN Priority'),
+			_('802.1p priority (0-7).'));
+		for (var p = 0; p <= 7; p++)
+			o.value(String(p), String(p));
+		o.default = '0';
+		o.rmempty = false;
+
 		return m.render();
 	}
 });

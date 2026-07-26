@@ -41,7 +41,7 @@ jobs:
             libltdl-dev libmpc-dev libmpfr-dev libncurses5-dev \
             libncursesw5-dev libpython3-dev libreadline-dev libssl-dev \
             libtool libz-dev lrzsz mkisofs msmtp nano ninja-build p7zip \
-            p7zip-full patch pkgconf python2.7 python3 python3-pip \
+            p7zip-full patch pkgconf python3 python3-pip \
             python3-ply python3-pyelftools python3-setuptools qemu-utils \
             rsync scons squashfs-tools subversion swig texinfo \
             uglifyjs unzip upx-ucl vim wget xmlto xxd zlib1g-dev
@@ -79,7 +79,6 @@ jobs:
       - name: Configure OpenWrt
         working-directory: ${{ env.OPENWRT_DIR }}
         run: |
-          # Start with AN7581 target defaults
           cat > .config <<'EOF'
           CONFIG_TARGET_airoha=y
           CONFIG_TARGET_airoha_an7581=y
@@ -91,12 +90,6 @@ jobs:
           CONFIG_PACKAGE_luci-lib-ipkg=y
           CONFIG_PACKAGE_luci-compat=y
           CONFIG_PACKAGE_luci-app-firewall=y
-          CONFIG_PACKAGE_luci-app-network=y
-
-          # Lua
-          CONFIG_PACKAGE_lua=y
-          CONFIG_PACKAGE_luci-lib-nixio=y
-          CONFIG_PACKAGE_luci-lib-jsonc=y
 
           # Web server
           CONFIG_PACKAGE_uhttpd=y
@@ -105,21 +98,14 @@ jobs:
           # Shell utils
           CONFIG_PACKAGE_jshn=y
           CONFIG_PACKAGE_jsonfilter=y
-          CONFIG_PACKAGEuci=y
+          CONFIG_PACKAGE_uci=y
 
           # Busybox
           CONFIG_PACKAGE_busybox=y
-          CONFIG_PACKAGE_busybox-defaults=y
 
-          # Kernel modules - PON support
+          # Kernel modules - storage support
           CONFIG_PACKAGE_kmod-fs-nfs=y
           CONFIG_PACKAGE_kmod-usb-storage=y
-
-          # Disable unnecessary packages to speed up build
-          CONFIG_PACKAGE_dnsmasq=n
-          CONFIG_PACKAGE_ppp=n
-          CONFIG_PACKAGE_pppoe=n
-          CONFIG_PACKAGE_kmod-iptunnel6=n
           EOF
           make defconfig
 
@@ -131,7 +117,7 @@ jobs:
           find dl/ -size -1024c -delete
 
       - name: Compile firmware
-        working-directory: ${{ env.OPENWrt_DIR }}
+        working-directory: ${{ env.OPENWRT_DIR }}
         run: |
           make -j$(nproc) || make -j1 V=s
           echo "Build complete"
@@ -142,7 +128,6 @@ jobs:
       - name: Extract rootfs for LXC testing
         run: |
           mkdir -p output/rootfs
-          # Find the built firmware/rootfs
           FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d -name "nokia_xg-040g-md" 2>/dev/null | head -1)
           if [ -z "$FIRMWARE_DIR" ]; then
             FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d | head -1)
@@ -150,38 +135,30 @@ jobs:
           echo "Firmware dir: $FIRMWARE_DIR"
           ls -la "$FIRMWARE_DIR/" 2>/dev/null || true
 
-          # Extract rootfs from combined image if available
           COMBINED=$(find "$FIRMWARE_DIR" -name "*combined*" -o -name "*rootfs*" 2>/dev/null | head -1)
           if [ -n "$COMBINED" ]; then
             echo "Found: $COMBINED"
-            # For ext4 images, we can mount and extract
             if file "$COMBINED" | grep -q "ext4\|filesystem"; then
               sudo mkdir -p /mnt/rootfs
               sudo mount -o loop "$COMBINED" /mnt/rootfs 2>/dev/null && {
                 sudo cp -a /mnt/rootfs/* output/rootfs/
                 sudo umount /mnt/rootfs
               } || {
-                # Try unsquashfs
                 sudo unsquashfs -d output/rootfs "$COMBINED" 2>/dev/null || true
               }
             fi
           fi
 
-          # If rootfs extraction failed, create minimal test rootfs from build output
           if [ ! -f output/rootfs/etc/config/system ]; then
             echo "Creating rootfs from build artifacts..."
-            # Use the image builder output or compile a minimal rootfs
             STAGING_DIR="${{ env.OPENWRT_DIR }}/staging_dir/target-aarch64_cortex-a53_musl"
             if [ -d "$STAGING_DIR" ]; then
-              # Copy essential files from staging
               cp -a "$STAGING_DIR/rootfs/"* output/rootfs/ 2>/dev/null || true
             fi
           fi
 
-          # Overlay our LuCI files
           cp -a luci-overlay/* output/rootfs/ 2>/dev/null || true
 
-          # Create tarball
           cd output
           tar czf rootfs.tar.gz -C rootfs .
           echo "rootfs.tar.gz created: $(ls -lh rootfs.tar.gz | awk '{print $5}')"
@@ -191,19 +168,13 @@ jobs:
           mkdir -p output/release
           FIRMWARE_DIR=$(find ${{ env.OPENWRT_DIR }}/bin/targets -type d | head -1)
 
-          # Copy firmware images
           if [ -d "$FIRMWARE_DIR" ]; then
             cp "$FIRMWARE_DIR"/*.bin "$FIRMWARE_DIR"/*.img.gz "$FIRMWARE_DIR"/*.itb \
                "$FIRMWARE_DIR"/*.squashfs 2>/dev/null output/release/ || true
           fi
 
-          # Copy rootfs tarball
           cp output/rootfs.tar.gz output/release/ 2>/dev/null || true
-
-          # Copy our overlay
           cp output/luci-overlay.tar.gz output/release/ 2>/dev/null || true
-
-          # Copy install script
           cp output/install_overlay.sh output/release/ 2>/dev/null || true
 
           echo "=== Release artifacts ==="

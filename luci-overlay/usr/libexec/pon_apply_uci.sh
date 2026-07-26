@@ -74,4 +74,12 @@ fi
 pm_flag=$(uci get pon.omci.pm_flag 2>/dev/null)
 [ -n "$pm_flag" ] && omci_set_pm_flag "$pm_flag"
 
+# Apply PON VLAN
+vlan_en=$(uci get pon.pon_vlan.enabled 2>/dev/null)
+vlan_mode=$(uci get pon.pon_vlan.mode 2>/dev/null)
+vlan_id=$(uci get pon.pon_vlan.vid 2>/dev/null)
+vlan_prio=$(uci get pon.pon_vlan.priority 2>/dev/null)
+pon_set_pon_vlan "${vlan_en:-0}" "${vlan_mode:-transparent}" "$vlan_id" "$vlan_prio"
+logger -t airoha-pon "Applied PON VLAN: enabled=${vlan_en:-0} mode=${vlan_mode:-transparent} vid=${vlan_id:-none}"
+
 logger -t airoha-pon "UCI configuration applied successfully"

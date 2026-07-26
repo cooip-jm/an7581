@@ -1,0 +1,29 @@
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config device
+	option name 'pon'
+
+config interface 'wan'
+	option device 'pon'
+	option proto 'dhcp'
+	option delegate '0'
+
+config device
+	option name 'omci'
+
+config interface 'omci'
+	option device 'omci'
+	option proto 'none'
+
+config device
+	option name 'eth'
+
+config interface 'lan'
+	option device 'eth'
+	option proto 'static'
+	option ipaddr '192.168.1.1'
+	option netmask '255.255.255.0'
