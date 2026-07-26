@@ -1,5 +1,5 @@
 'use strict';
-'require baseclass';
+'require view';
 'require rpc';
 
 var callOpticalTx = rpc.declare({
@@ -48,7 +48,7 @@ var callOpticalRxByte = rpc.declare({
 	expect: { '': '' }
 });
 
-return baseclass.extend({
+return view.extend({
 	title: _('Optical Module'),
 
 	load: function() {

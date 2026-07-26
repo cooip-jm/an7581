@@ -1,9 +1,9 @@
 'use strict';
-'require baseclass';
+'require view';
 'require form';
 'require uci';
 
-return baseclass.extend({
+return view.extend({
 	title: _('OLT Authentication'),
 
 	load: function() {

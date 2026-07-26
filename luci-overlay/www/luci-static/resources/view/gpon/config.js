@@ -1,15 +1,16 @@
 'use strict';
-'require baseclass';
+'require view';
 'require form';
 'require uci';
 
-return baseclass.extend({
+return view.extend({
 	title: _('PON Configuration'),
 
 	load: function() {
-		return L.resolveDefault(uci.load('pon'), null).then(function() {
-			return L.resolveDefault(uci.load('pon_auth'), null);
-		});
+		return Promise.all([
+			L.resolveDefault(uci.load('pon'), null),
+			L.resolveDefault(uci.load('pon_auth'), null)
+		]);
 	},
 
 	render: function() {

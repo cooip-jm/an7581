@@ -1,5 +1,5 @@
 'use strict';
-'require baseclass';
+'require view';
 'require rpc';
 
 var callOmciState = rpc.declare({
@@ -23,7 +23,7 @@ var callOmciRunning = rpc.declare({
 	expect: { '': '' }
 });
 
-return baseclass.extend({
+return view.extend({
 	title: _('OMCI Status'),
 
 	load: function() {

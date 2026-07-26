@@ -1,5 +1,5 @@
 'use strict';
-'require baseclass';
+'require view';
 'require rpc';
 
 var callPonStatus = rpc.declare({
@@ -9,33 +9,26 @@ var callPonStatus = rpc.declare({
 	expect: { '': {} }
 });
 
-return baseclass.extend({
+return view.extend({
 	title: _('PON Status'),
 
 	load: function() {
-		return L.resolveDefault(callPonStatus(), null);
+		return L.resolveDefault(callPonStatus(), {});
 	},
 
 	render: function(data) {
-		if (!data)
-			return E('div', { 'class': 'alert-message warning' }, [
-				E('p', {}, [_('Unable to retrieve PON status. The PON subsystem may not be available on this system.')])
-			]);
+		var info = data || {};
 
-		var status_text = data.pon_state || 'Unknown';
-		var link_state = data.link_state || 'Down';
-		var fec_rx = data.fec_rx || 0;
-		var omcimgr = data.omcimgr_running || false;
-		var ponmgr = data.ponmgr_running || false;
-
-		var status_icon = link_state === 'Connected'
-			? E('span', { 'class': 'label label-success' }, [status_text])
-			: E('span', { 'class': 'label' }, [status_text]);
+		var status_text = info.pon_state || 'Unknown';
+		var link_state = info.link_state || 'Down';
+		var fec_rx = info.fec_rx || 0;
+		var omcimgr = info.omcimgr_running || false;
+		var ponmgr = info.ponmgr_running || false;
 
 		var table = E('table', { 'class': 'table' }, [
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left', 'width': '33%' }, [_('PON State')]),
-				E('td', { 'class': 'td left' }, [status_icon])
+				E('td', { 'class': 'td left' }, [status_text])
 			]),
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left' }, [_('Link State')]),
@@ -71,23 +64,23 @@ return baseclass.extend({
 		var optical_table = E('table', { 'class': 'table' }, [
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left', 'width': '33%' }, [_('TX Power')]),
-				E('td', { 'class': 'td left' }, [data.tx_power ? data.tx_power + ' dBm' : 'N/A'])
+				E('td', { 'class': 'td left' }, [info.tx_power ? info.tx_power + ' dBm' : 'N/A'])
 			]),
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left' }, [_('RX Power')]),
-				E('td', { 'class': 'td left' }, [data.rx_power ? data.rx_power + ' dBm' : 'N/A'])
+				E('td', { 'class': 'td left' }, [info.rx_power ? info.rx_power + ' dBm' : 'N/A'])
 			]),
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left' }, [_('Temperature')]),
-				E('td', { 'class': 'td left' }, [data.temperature ? data.temperature + ' \u00b0C' : 'N/A'])
+				E('td', { 'class': 'td left' }, [info.temperature ? info.temperature + ' \u00b0C' : 'N/A'])
 			]),
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left' }, [_('Bias Current')]),
-				E('td', { 'class': 'td left' }, [data.bias_current ? data.bias_current + ' \u00b5A' : 'N/A'])
+				E('td', { 'class': 'td left' }, [info.bias_current ? info.bias_current + ' \u00b5A' : 'N/A'])
 			]),
 			E('tr', { 'class': 'tr' }, [
 				E('td', { 'class': 'td left' }, [_('Supply Voltage')]),
-				E('td', { 'class': 'td left' }, [data.voltage ? data.voltage + ' mV' : 'N/A'])
+				E('td', { 'class': 'td left' }, [info.voltage ? info.voltage + ' mV' : 'N/A'])
 			])
 		]);
 
