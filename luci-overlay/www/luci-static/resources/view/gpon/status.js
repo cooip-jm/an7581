@@ -29,6 +29,7 @@ var T = function(s) { return (window.TR && window.TR[s] !== undefined) ? window.
 
 var callRead = rpc.declare({
 	object: 'file', method: 'read',
+	params: ['path'],
 	expect: { data: '' }
 });
 
