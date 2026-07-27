@@ -34,7 +34,7 @@ var callRead = rpc.declare({
 });
 
 function readFile(path) {
-	return L.resolveDefault(callRead({ path: path }), '').then(function(res) {
+	return L.resolveDefault(callRead(path), '').then(function(res) {
 		if (res && res.data !== undefined) return String(res.data).trim();
 		return '';
 	});

@@ -27,7 +27,7 @@ var callRead = rpc.declare({
 });
 
 function readPonFile(basePath, filename) {
-	return L.resolveDefault(callRead({ path: basePath + '/' + filename }), '').then(function(res) {
+	return L.resolveDefault(callRead(basePath + '/' + filename), '').then(function(res) {
 		if (res && res.data !== undefined) return String(res.data).trim();
 		return '';
 	});
