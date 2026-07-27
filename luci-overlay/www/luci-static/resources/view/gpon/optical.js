@@ -1,204 +1,104 @@
 'use strict';
 'require view';
 'require rpc';
-
-var callOpticalTx = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_tx_power_dbm'] },
-	expect: { '': '' }
-});
-var callOpticalRx = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_rx_power_dbm'] },
-	expect: { '': '' }
-});
-var callOpticalTemp = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_temperature'] },
-	expect: { '': '' }
-});
-var callOpticalBias = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_bias_current'] },
-	expect: { '': '' }
-});
-var callOpticalVolt = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_voltage'] },
-	expect: { '': '' }
-});
-var callOpticalTxPkt = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_tx_packets'] },
-	expect: { '': '' }
-});
-var callOpticalRxPkt = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_rx_packets'] },
-	expect: { '': '' }
-});
-var callOpticalTxByte = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_tx_bytes'] },
-	expect: { '': '' }
-});
-var callOpticalRxByte = rpc.declare({
-	object: 'file', method: 'exec',
-	params: { command: ['/bin/sh', '-c', '. /usr/libexec/pon_helpers.sh; pon_get_rx_bytes'] },
-	expect: { '': '' }
-});
+'require uci';
 
 if (!window.TR) window.TR = {};
 Object.assign(window.TR, {
-	'PON Management': 'PON 管理',
-	'PON Status': 'PON 状态',
-	'PON Configuration': 'PON 配置',
-	'OLT Authentication': 'OLT 认证',
 	'Optical Module': '光模块',
-	'OMCI Status': 'OMCI 状态',
-	'PON State': 'PON 状态',
-	'Link State': '链路状态',
-	'Connected': '已连接',
-	'Not Connected': '未连接',
-	'FEC (Downstream)': '前向纠错 (下行)',
-	'Enabled': '已启用',
-	'Disabled': '已禁用',
-	'Running': '运行中',
-	'Stopped': '已停止',
-	'TX Power': '发射功率',
-	'RX Power': '接收功率',
 	'Temperature': '温度',
 	'Bias Current': '偏置电流',
 	'Supply Voltage': '供电电压',
-	'PON Link Information': 'PON 链路信息',
-	'Optical Transceiver': '光收发器',
-	'Enable PON Subsystem': '启用 PON 子系统',
-	'Start the PON driver stack, BOSA transceiver, and management daemons on boot.': '开机启动 PON 驱动栈、BOSA 收发器和管理进程。',
-	'PON Mode': 'PON 模式',
-	'Select the PON protocol. Auto-detect is recommended.': '选择 PON 协议。建议使用自动检测。',
-	'Auto-detect': '自动检测',
-	'GPON (ITU-T G.984)': 'GPON (ITU-T G.984)',
-	'EPON (IEEE 802.3ah)': 'EPON (IEEE 802.3ah)',
-	'XGS-PON (ITU-T G.9807.1)': 'XGS-PON (ITU-T G.9807.1)',
-	'BOSA Transceiver Chip': 'BOSA 收发器芯片',
-	'EN7572 (internal)': 'EN7572 (内置)',
-	'GN25L98': 'GN25L98',
-	'GN28L96': 'GN28L96',
-	'UX3320': 'UX3320',
-	'Global Settings': '全局设置',
-	'FEC Settings': 'FEC 设置',
-	'RX FEC (Downstream)': 'RX FEC (下行)',
-	'TX FEC (Upstream)': 'TX FEC (上行)',
-	'Diagnostics': '诊断',
-	'Enable PON Debug Logging': '启用 PON 调试日志',
-	'Enable O1 Init Report': '启用 O1 初始化报告',
-	'OMCI Settings': 'OMCI 设置',
-	'Enable OMCI Manager': '启用 OMCI 管理器',
-	'Performance Monitor': '性能监控',
-	'PON VLAN': 'PON VLAN',
-	'Enable VLAN Tagging': '启用 VLAN 标签',
-	'Configure VLAN tag handling on the PON interface.': '配置 PON 接口的 VLAN 标签处理。',
-	'VLAN Mode': 'VLAN 模式',
-	'Transparent (no VLAN processing)': '透明 (不处理 VLAN)',
-	'Tag (add/replace VLAN tag)': '标签 (添加/替换 VLAN 标签)',
-	'Translate (rewrite VLAN tag)': '转换 (重写 VLAN 标签)',
-	'VLAN ID': 'VLAN ID',
-	'VLAN identifier (1-4094). Required for tag and translate modes.': 'VLAN 标识符 (1-4094)，标签和转换模式必需。',
-	'VLAN Priority': 'VLAN 优先级',
-	'802.1p priority (0-7).': '802.1p 优先级 (0-7)。',
-	'Configure PON hardware parameters for the Nokia XG-040G-MD (AN7581).': '配置 Nokia XG-040G-MD (AN7581) 的 PON 硬件参数。',
-	'Serial Number (SN)': '序列号 (SN)',
-	'Vendor ID': '厂商 ID',
-	'4-byte ASCII vendor identifier (e.g. ALCL, HWTC).': '4 字节 ASCII 厂商标识符 (如 ALCL, HWTC)。',
-	'VSSD (Vendor-Specific Serial)': 'VSSD (厂商特定序列号)',
-	'8-byte vendor-specific serial number in hex (8 hex digits). Combined with Vendor ID forms the 12-byte ONT SN.': '8 字节十六进制厂商特定序列号 (8 位 hex)。与厂商 ID 组合成 12 字节 ONT 序列号。',
-	'Must be exactly 8 hex digits (0-9, a-f).': '必须为 8 位十六进制数字 (0-9, a-f)。',
-	'SLID / Password Authentication': 'SLID / 密码认证',
-	'Enable Password Authentication': '启用密码认证',
-	'Disable Password Transmission': '禁止发送密码',
-	'When enabled, the ONT will not send the password/PLOAM to the OLT during registration.': '启用后，ONT 注册时不向 OLT 发送密码/PLOAM。',
-	'ONT Password (SLID)': 'ONT 密码 (SLID)',
-	'Password for OLT authentication. ASCII: max 10 characters. HEX: max 20 hex digits.': 'OLT 认证密码。ASCII 模式：最多 10 个字符。HEX 模式：最多 20 位十六进制。',
-	'SLID Format': 'SLID 格式',
-	'ASCII Mode (max 10 characters)': 'ASCII 模式 (最多 10 个字符)',
-	'HEX Mode (max 20 hex digits)': 'HEX 模式 (最多 20 位十六进制)',
-	'LOID / Logical ID Authentication': 'LOID / 逻辑 ID 认证',
-	'Enable LOID Authentication': '启用 LOID 认证',
-	'Logical ID': '逻辑 ID',
-	'Logic Identifier for OLT registration. Max 24 characters.': 'OLT 注册的逻辑标识符，最多 24 个字符。',
-	'LOID Password': 'LOID 密码',
-	'Direct Password Authentication': '直接密码认证',
-	'ONT Password': 'ONT 密码',
-	'Configure ONT serial number and password for OLT authentication.': '配置 ONT 序列号和密码用于 OLT 认证。',
-	'OMCI State': 'OMCI 状态',
-	'Equipment ID': '设备 ID',
-	'Serial Number': '序列号',
-	'OMCI Management Interface': 'OMCI 管理接口',
-	'TX Power (dBm)': '发射功率 (dBm)',
-	'RX Power (dBm)': '接收功率 (dBm)',
-	'Temperature (\u00b0C)': '温度 (\u00b0C)',
-	'Bias Current (\u00b5A)': '偏置电流 (\u00b5A)',
-	'Supply Voltage (mV)': '供电电压 (mV)',
-	'TX Packets': '发送包数',
-	'RX Packets': '接收包数',
+	'TX Power': '发射功率',
+	'RX Power': '接收功率',
 	'TX Bytes': '发送字节数',
 	'RX Bytes': '接收字节数',
-	'SFP/BOSA Optical Parameters': 'SFP/BOSA 光参数',
-	'N/A': '无数据',
-	'Unknown': '未知',
-	'Hardware Info': '硬件信息',
-	'Unable to retrieve PON status. The PON subsystem may not be available on this system.': '无法获取 PON 状态。当前系统可能不支持 PON 子系统。',
-	'Save & Apply': '保存并应用',
-	'Save': '保存',
-	'Reset': '重置',
-	'Loading view…': '加载中…'
+	'TX Packets': '发送包数',
+	'RX Packets': '接收包数',
+	'PON Counters': 'PON 计数器',
+	'Transceiver Info': '收发器信息'
+});
+var T = function(s) { return (window.TR && window.TR[s] !== undefined) ? window.TR[s] : s; };
+
+var callRead = rpc.declare({
+	object: 'file', method: 'read',
+	expect: { data: '' }
 });
 
+function readPonFile(basePath, filename) {
+	return L.resolveDefault(callRead({ path: basePath + '/' + filename }), '').then(function(res) {
+		if (res && res.data !== undefined) return String(res.data).trim();
+		return '';
+	});
+}
+
 return view.extend({
-	title: _('Optical Module'),
+	title: T('Optical Module'),
 
 	load: function() {
-		return Promise.all([
-			L.resolveDefault(callOpticalTx, ''),
-			L.resolveDefault(callOpticalRx, ''),
-			L.resolveDefault(callOpticalTemp, ''),
-			L.resolveDefault(callOpticalBias, ''),
-			L.resolveDefault(callOpticalVolt, ''),
-			L.resolveDefault(callOpticalTxPkt, '0'),
-			L.resolveDefault(callOpticalRxPkt, '0'),
-			L.resolveDefault(callOpticalTxByte, '0'),
-			L.resolveDefault(callOpticalRxByte, '0')
-		]);
+		return L.resolveDefault(uci.load('pon'), null).then(function() {
+			var basePath = uci.get_first('pon', 'global', 'proc_path') || '/proc/tc3162';
+			return Promise.all([
+				readPonFile(basePath, 'pon_temp'),
+				readPonFile(basePath, 'pon_bias'),
+				readPonFile(basePath, 'pon_voltage'),
+				readPonFile(basePath, 'pon_txpower'),
+				readPonFile(basePath, 'pon_rxpower'),
+				readPonFile(basePath, 'pon_txbytes'),
+				readPonFile(basePath, 'pon_rxbytes'),
+				readPonFile(basePath, 'pon_txpkts'),
+				readPonFile(basePath, 'pon_rxpkts')
+			]).then(function(results) {
+				return {
+					temp: results[0] || 'N/A',
+					bias: results[1] || 'N/A',
+					voltage: results[2] || 'N/A',
+					txpower: results[3] || 'N/A',
+					rxpower: results[4] || 'N/A',
+					txbytes: results[5] || 'N/A',
+					rxbytes: results[6] || 'N/A',
+					txpkts: results[7] || 'N/A',
+					rxpkts: results[8] || 'N/A'
+				};
+			});
+		});
 	},
 
-	render: function(data) {
-		var vals = data || [];
-		for (var i = 0; i < vals.length; i++)
-			vals[i] = String(vals[i] || '').trim() || 'N/A';
+	render: function(info) {
+		info = info || {};
 
-		var fields = [
-			[_('TX Power'), vals[0] !== 'N/A' ? vals[0] + ' dBm' : 'N/A'],
-			[_('RX Power'), vals[1] !== 'N/A' ? vals[1] + ' dBm' : 'N/A'],
-			[_('Temperature'), vals[2] !== 'N/A' ? vals[2] + ' \u00b0C' : 'N/A'],
-			[_('Bias Current'), vals[3] !== 'N/A' ? vals[3] + ' \u00b5A' : 'N/A'],
-			[_('Supply Voltage'), vals[4] !== 'N/A' ? vals[4] + ' mV' : 'N/A'],
-			[_('TX Packets'), vals[5]],
-			[_('RX Packets'), vals[6]],
-			[_('TX Bytes'), vals[7]],
-			[_('RX Bytes'), vals[8]]
-		];
+		var makeRow = function(label, value, unit) {
+			return E('tr', { 'class': 'tr' }, [
+				E('td', { 'class': 'td left', 'width': '33%' }, [label]),
+				E('td', { 'class': 'td left' }, [value !== 'N/A' ? value + ' ' + unit : 'N/A'])
+			]);
+		};
 
-		var table = E('table', { 'class': 'table' });
-		fields.forEach(function(f) {
-			table.appendChild(E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td left', 'width': '33%' }, [E('strong', {}, [f[0]])]),
-				E('td', { 'class': 'td left' }, [f[1]])
-			]));
-		});
+		var optical_table = E('table', { 'class': 'table' }, [
+			makeRow(T('Temperature'), info.temp, '\u00b0C'),
+			makeRow(T('Bias Current'), info.bias, '\u00b5A'),
+			makeRow(T('Supply Voltage'), info.voltage, 'mV'),
+			makeRow(T('TX Power'), info.txpower, 'dBm'),
+			makeRow(T('RX Power'), info.rxpower, 'dBm')
+		]);
+
+		var counter_table = E('table', { 'class': 'table' }, [
+			makeRow(T('TX Bytes'), info.txbytes, ''),
+			makeRow(T('RX Bytes'), info.rxbytes, ''),
+			makeRow(T('TX Packets'), info.txpkts, ''),
+			makeRow(T('RX Packets'), info.rxpkts, '')
+		]);
 
 		return E('div', {}, [
-			E('h2', { 'class': 'topic-heading' }, [_('Optical Module')]),
-			E('div', { 'class': 'cbi-section' }, [table])
+			E('h2', { 'class': 'topic-heading' }, [T('Optical Module')]),
+			E('div', { 'class': 'cbi-section' }, [
+				E('div', { 'class': 'section-title' }, [T('Transceiver Info')]),
+				optical_table
+			]),
+			E('div', { 'class': 'cbi-section' }, [
+				E('div', { 'class': 'section-title' }, [T('PON Counters')]),
+				counter_table
+			])
 		]);
 	}
 });

@@ -1,13 +1,32 @@
 #!/bin/sh
 # PON helper functions for LuCI integration on AN7581
-# Wraps vendor CLI tools: ponmgr, omcli, hcfgtool, ritool
-# Per LUCI_PON_DESIGN.md
+# Wraps vendor CLI tools: ponmgr, omciMgr, hcfgtool, ritool
+#
+# ponmgr CLI reference (verified against binary):
+#   ponmgr gpon set sn <VENDOR_ID_4> <VSSN_8>
+#   ponmgr gpon set passwd ascii <password>
+#   ponmgr gpon set passwd hex <hex_password>
+#   ponmgr gpon set event_ctrl init_report_o1 <0|1>
+#   ponmgr gpon set dbg_lv <act|omci|oam|int|trace|warning|content|debug|err|eqd|xmcs>
+#   ponmgr gpon set gpon_silence
+#   ponmgr gpon set cnt_type <gem|ethernet>
+#   ponmgr gpon get info
+#   ponmgr gpon get rx_fec_cfg
+#   ponmgr gpon get sys_link_cfg
+#
+# omciMgr is a long-running daemon, NOT a CLI tool.
+# Config is via /tmp/autoponini/ or OMCI protocol, not direct CLI.
 
-export LD_LIBRARY_PATH="/usr/lib:${LD_LIBRARY_PATH}"
-PONMGR="/sbin/ponmgr"
-OMCLI="/sbin/omciMgr"
+export LD_LIBRARY_PATH="/opt/vendor/lib:${LD_LIBRARY_PATH}"
+PONMGR="/opt/vendor/bin/ponmgr"
+OMCLI="/opt/vendor/bin/omciMgr"
 HCFGTOOL="/usr/bin/hcfgtool"
 RITOOL="/usr/bin/ritool"
+
+# Load PON proc path from UCI config
+# On real device: /proc/tc3162 (kernel driver), in LXC: /root/tc3162 (simulation)
+PON_PROC_DIR="$(uci -q get pon.@global[0].proc_path)" 2>/dev/null
+[ -z "$PON_PROC_DIR" ] && PON_PROC_DIR="/proc/tc3162"
 
 # ─── Hardware Info ───────────────────────────────────────
 
@@ -110,11 +129,11 @@ pon_set_loid() {
 
 # ─── Optical Module (from proc) ──────────────────────────
 
-pon_get_tx_power_raw() { cat /proc/tc3162/pon_txpower 2>/dev/null; }
-pon_get_rx_power_raw() { cat /proc/tc3162/pon_rxpower 2>/dev/null; }
-pon_get_temperature_raw() { cat /proc/tc3162/pon_temp 2>/dev/null; }
-pon_get_bias_current_raw() { cat /proc/tc3162/pon_bias 2>/dev/null; }
-pon_get_voltage_raw() { cat /proc/tc3162/pon_voltage 2>/dev/null; }
+pon_get_tx_power_raw() { cat $PON_PROC_DIR/pon_txpower 2>/dev/null; }
+pon_get_rx_power_raw() { cat $PON_PROC_DIR/pon_rxpower 2>/dev/null; }
+pon_get_temperature_raw() { cat $PON_PROC_DIR/pon_temp 2>/dev/null; }
+pon_get_bias_current_raw() { cat $PON_PROC_DIR/pon_bias 2>/dev/null; }
+pon_get_voltage_raw() { cat $PON_PROC_DIR/pon_voltage 2>/dev/null; }
 
 pon_raw_to_dbm() {
     local raw="$1"
@@ -151,10 +170,10 @@ pon_get_voltage() {
     [ -n "$raw" ] && [ "$raw" -gt 0 ] 2>/dev/null && echo "$((raw * 100))" || echo "N/A"
 }
 
-pon_get_tx_packets() { cat /proc/tc3162/pon_txpkts 2>/dev/null || echo "0"; }
-pon_get_rx_packets() { cat /proc/tc3162/pon_rxpkts 2>/dev/null || echo "0"; }
-pon_get_tx_bytes()   { cat /proc/tc3162/pon_txbytes 2>/dev/null || echo "0"; }
-pon_get_rx_bytes()   { cat /proc/tc3162/pon_rxbytes 2>/dev/null || echo "0"; }
+pon_get_tx_packets() { cat $PON_PROC_DIR/pon_txpkts 2>/dev/null || echo "0"; }
+pon_get_rx_packets() { cat $PON_PROC_DIR/pon_rxpkts 2>/dev/null || echo "0"; }
+pon_get_tx_bytes()   { cat $PON_PROC_DIR/pon_txbytes 2>/dev/null || echo "0"; }
+pon_get_rx_bytes()   { cat $PON_PROC_DIR/pon_rxbytes 2>/dev/null || echo "0"; }
 
 # ─── OMCI ────────────────────────────────────────────────
 
