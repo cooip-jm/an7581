@@ -1,67 +1,13 @@
 'use strict';
 'require view';
 'require form';
+'require rpc';
 'require uci';
 
 if (!window.TR) window.TR = {};
 Object.assign(window.TR, {
-	'PON Management': 'PON 管理',
-	'PON Status': 'PON 状态',
-	'PON Configuration': 'PON 配置',
 	'OLT Authentication': 'OLT 认证',
-	'Optical Module': '光模块',
-	'OMCI Status': 'OMCI 状态',
-	'PON State': 'PON 状态',
-	'Link State': '链路状态',
-	'Connected': '已连接',
-	'Not Connected': '未连接',
-	'FEC (Downstream)': '前向纠错 (下行)',
-	'Enabled': '已启用',
-	'Disabled': '已禁用',
-	'Running': '运行中',
-	'Stopped': '已停止',
-	'TX Power': '发射功率',
-	'RX Power': '接收功率',
-	'Temperature': '温度',
-	'Bias Current': '偏置电流',
-	'Supply Voltage': '供电电压',
-	'PON Link Information': 'PON 链路信息',
-	'Optical Transceiver': '光收发器',
-	'Enable PON Subsystem': '启用 PON 子系统',
-	'Start the PON driver stack, BOSA transceiver, and management daemons on boot.': '开机启动 PON 驱动栈、BOSA 收发器和管理进程。',
-	'PON Mode': 'PON 模式',
-	'Select the PON protocol. Auto-detect is recommended.': '选择 PON 协议。建议使用自动检测。',
-	'Auto-detect': '自动检测',
-	'GPON (ITU-T G.984)': 'GPON (ITU-T G.984)',
-	'EPON (IEEE 802.3ah)': 'EPON (IEEE 802.3ah)',
-	'XGS-PON (ITU-T G.9807.1)': 'XGS-PON (ITU-T G.9807.1)',
-	'BOSA Transceiver Chip': 'BOSA 收发器芯片',
-	'EN7572 (internal)': 'EN7572 (内置)',
-	'GN25L98': 'GN25L98',
-	'GN28L96': 'GN28L96',
-	'UX3320': 'UX3320',
-	'Global Settings': '全局设置',
-	'FEC Settings': 'FEC 设置',
-	'RX FEC (Downstream)': 'RX FEC (下行)',
-	'TX FEC (Upstream)': 'TX FEC (上行)',
-	'Diagnostics': '诊断',
-	'Enable PON Debug Logging': '启用 PON 调试日志',
-	'Enable O1 Init Report': '启用 O1 初始化报告',
-	'OMCI Settings': 'OMCI 设置',
-	'Enable OMCI Manager': '启用 OMCI 管理器',
-	'Performance Monitor': '性能监控',
-	'PON VLAN': 'PON VLAN',
-	'Enable VLAN Tagging': '启用 VLAN 标签',
-	'Configure VLAN tag handling on the PON interface.': '配置 PON 接口的 VLAN 标签处理。',
-	'VLAN Mode': 'VLAN 模式',
-	'Transparent (no VLAN processing)': '透明 (不处理 VLAN)',
-	'Tag (add/replace VLAN tag)': '标签 (添加/替换 VLAN 标签)',
-	'Translate (rewrite VLAN tag)': '转换 (重写 VLAN 标签)',
-	'VLAN ID': 'VLAN ID',
-	'VLAN identifier (1-4094). Required for tag and translate modes.': 'VLAN 标识符 (1-4094)，标签和转换模式必需。',
-	'VLAN Priority': 'VLAN 优先级',
-	'802.1p priority (0-7).': '802.1p 优先级 (0-7)。',
-	'Configure PON hardware parameters for the Nokia XG-040G-MD (AN7581).': '配置 Nokia XG-040G-MD (AN7581) 的 PON 硬件参数。',
+	'Configure ONT serial number and password for OLT authentication.': '配置 ONT 序列号和密码用于 OLT 认证。',
 	'Serial Number (SN)': '序列号 (SN)',
 	'Vendor ID': '厂商 ID',
 	'4-byte ASCII vendor identifier (e.g. ALCL, HWTC).': '4 字节 ASCII 厂商标识符 (如 ALCL, HWTC)。',
@@ -84,43 +30,101 @@ Object.assign(window.TR, {
 	'LOID Password': 'LOID 密码',
 	'Direct Password Authentication': '直接密码认证',
 	'ONT Password': 'ONT 密码',
-	'Configure ONT serial number and password for OLT authentication.': '配置 ONT 序列号和密码用于 OLT 认证。',
 	'OMCI State': 'OMCI 状态',
-	'Equipment ID': '设备 ID',
-	'Serial Number': '序列号',
-	'OMCI Management Interface': 'OMCI 管理接口',
-	'TX Power (dBm)': '发射功率 (dBm)',
-	'RX Power (dBm)': '接收功率 (dBm)',
-	'Temperature (\u00b0C)': '温度 (\u00b0C)',
-	'Bias Current (\u00b5A)': '偏置电流 (\u00b5A)',
-	'Supply Voltage (mV)': '供电电压 (mV)',
-	'TX Packets': '发送包数',
-	'RX Packets': '接收包数',
-	'TX Bytes': '发送字节数',
-	'RX Bytes': '接收字节数',
-	'SFP/BOSA Optical Parameters': 'SFP/BOSA 光参数',
-	'N/A': '无数据',
+	'Authentication Status': '认证状态',
+	'O5 — Authenticated': 'O5 — 已认证',
+	'O4 — Ranging': 'O4 — 测距中',
+	'O2/O3 — Serial Number': 'O2/O3 — 序列号注册中',
+	'O1 — Not Started': 'O1 — 未开始',
+	'Current PON State': '当前 PON 状态',
+	'Connected': '已连接',
+	'Initializing': '初始化中',
 	'Unknown': '未知',
-	'Hardware Info': '硬件信息',
-	'Unable to retrieve PON status. The PON subsystem may not be available on this system.': '无法获取 PON 状态。当前系统可能不支持 PON 子系统。',
-	'Save & Apply': '保存并应用',
-	'Save': '保存',
-	'Reset': '重置',
-	'Loading view…': '加载中…'
+	'Save & Apply': '保存并应用', 'Save': '保存', 'Reset': '重置',
+	'Configuration applied to PON daemons.': '配置已应用到 PON 守护进程。',
+	'Failed to apply configuration.': '应用配置失败。',
+	'Saved. PON configuration applied.': '已保存，PON 配置已应用。'
 });
+var T = function(s) { return (window.TR && window.TR[s] !== undefined) ? window.TR[s] : s; };
+
+var callRead = rpc.declare({
+	object: 'file', method: 'read',
+	params: ['path'],
+	expect: { '': {} }
+});
+
+var callExec = rpc.declare({
+	object: 'file', method: 'exec',
+	params: ['command', 'params', 'env'],
+	expect: { '': {} }
+});
+
+function readFile(path) {
+	return L.resolveDefault(callRead(path), '').then(function(res) {
+		if (res && res.data !== undefined) return String(res.data).trim();
+		return '';
+	});
+}
+
+function applyPonConfig() {
+	return callExec('/usr/libexec/pon_apply_uci.sh', [], {}).then(function(res) {
+		if (res && res.code === 0) return true;
+		throw new Error('apply failed');
+	}).catch(function() { return false; });
+}
+
+function getLinkState(pon_state) {
+	switch (pon_state) {
+		case 'O5': case 'O5_2': return 'Connected';
+		case 'O7': return 'Emergency Stop';
+		case 'O1': case 'O2_3': case 'O4': return 'Initializing';
+		default: return 'Unknown';
+	}
+}
+
+function getAuthStatus(pon_state) {
+	switch (pon_state) {
+		case 'O5': case 'O5_2': return T('O5 — Authenticated');
+		case 'O4': return T('O4 — Ranging');
+		case 'O2_3': return T('O2/O3 — Serial Number');
+		case 'O1': return T('O1 — Not Started');
+		default: return T('Unknown');
+	}
+}
 
 return view.extend({
 	title: _('OLT Authentication'),
 
 	load: function() {
-		return L.resolveDefault(uci.load('pon_auth'), null);
+		return L.resolveDefault(uci.load('pon_auth'), null).then(function() {
+			return L.resolveDefault(uci.load('pon'), null).then(function() {
+				var basePath = uci.get_first('pon', 'global', 'proc_path') || '/proc/tc3162';
+				return readFile(basePath + '/omci_state');
+			});
+		}).then(function(omci_state) {
+			return { omci_state: omci_state || 'N/A' };
+		});
 	},
 
-	render: function() {
+	render: function(info) {
+		info = info || {};
 		var m, s, o;
 
 		m = new form.Map('pon_auth', _('OLT Authentication'),
 			_('Configure ONT serial number and password for OLT authentication.'));
+
+	/* ── Current Auth Status ────────────────────────── */
+	s = m.section(form.TypedSection, 'sn', _('Current PON State'));
+	s.anonymous = true;
+	s.addremove = false;
+
+	var omci_state = info.omci_state || 'N/A';
+	var link_state = getLinkState(omci_state);
+	var auth_status = getAuthStatus(omci_state);
+	var state_class = (link_state === 'Connected') ? 'label label-success'
+		: (link_state === 'Initializing') ? 'label label-warning'
+		: 'label label-secondary';
+	s.description = '<span class="' + state_class + '">' + _('OMCI State') + ': ' + omci_state + '</span> — ' + auth_status;
 
 		/* ── Serial Number (SN) ─────────────────────────── */
 		s = m.section(form.TypedSection, 'sn', _('Serial Number (SN)'));
@@ -200,6 +204,13 @@ return view.extend({
 		o.datatype = 'maxlength(20)';
 		o.rmempty = true;
 		o.password = true;
+
+		var origSave = m.save.bind(m);
+		m.save = function() {
+			return origSave().then(function(ok) {
+				if (ok !== false) return applyPonConfig();
+			});
+		};
 
 		return m.render();
 	}
