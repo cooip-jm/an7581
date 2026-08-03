@@ -1,0 +1,173 @@
+#!/bin/sh /etc/rc.common
+
+. /lib/functions/system.sh
+
+START=02
+
+update_macaddr_in_eeprom_bin() {
+	eeprom_file="$1"
+	macoff=$2
+
+	[ -n "$eeprom_file" -a -f $eeprom_file ] || return
+
+	basemac="$(fw_printenv -n ethaddr)"
+	[ -n "$basemac" ] || return
+
+	basemac=$(macaddr_add $basemac $macoff)
+	mac1=$(macaddr_add $basemac 2)
+	mac2=$(macaddr_add $basemac 3)
+
+	echo "ecnt_wifi_eeprom: Updating macaddr field in $eeprom_file" >/dev/kmsg
+	macaddr_2bin $mac1 | dd of=$eeprom_file conv=notrunc oflag=seek_bytes bs=6 seek=4 count=1|| echo -e "Failed to write $mac1 to $eeprom_file" >/dev/kmsg
+	macaddr_2bin $mac2 | dd of=$eeprom_file conv=notrunc oflag=seek_bytes bs=6 seek=10 count=1 || echo -e "Failed to write $mac2 to $eeprom_file" >/dev/kmsg
+}
+
+update_macaddr_in_profile() {
+	chip=$1
+
+    cat /etc/wireless/mediatek/${chip}.1.dat | grep MacAddress >/dev/null && return
+
+	basemac="$(fw_printenv -n ethaddr)"
+	[ -n "$basemac" ] || return
+
+	basemac=$(macaddr_add $basemac 0)
+	mac0=$(macaddr_add $basemac 2)
+	mac1=$(macaddr_add $basemac 3)
+	mac2=$(macaddr_add $basemac 4)
+	
+	echo "MacAddress=${mac0}" >>/etc/wireless/mediatek/${chip}.1.dat
+	echo "MacAddress1=${mac1}" >>/etc/wireless/mediatek/${chip}.1.dat
+	echo "MacAddress2=${mac2}" >>/etc/wireless/mediatek/${chip}.1.dat
+}
+
+ecnt_wifi_eeprom_create() {
+	wifi_chip="$1"
+	band="$2"
+	art_eeprom="$3"
+	default_eeprom="$4"
+	target_eeprom="$5"
+	macoff="$6"
+
+	wifi_chip_type=""
+	if [ -f "/proc/device-tree/airoha-mt76/chip-type-${band}" ]; then
+		wifi_chip_type=$(cat "/proc/device-tree/airoha-mt76/chip-type-${band}" | tr "a-z" "A-Z")
+	elif [ -f "/proc/device-tree/airoha-mt76/chip-type" ]; then
+		wifi_chip_type=$(cat "/proc/device-tree/airoha-mt76/chip-type" | tr "a-z" "A-Z")
+	fi
+
+	case "${wifi_chip_type}" in
+		EPAELNA|EPAILNA|IPAELNA|IPAILNA)
+			;;
+		*)
+			wifi_chip_type="IPAILNA"
+			;;
+	esac
+
+	# generate custom EEPROM name
+	custom_eeprom_dir=$(dirname "${target_eeprom}")
+	custom_eeprom="${custom_eeprom_dir}/${wifi_chip}_${band}_custom_eeprom.bin"
+
+	# generate Airoha EEPROM name
+	airoha_eeprom_dir=$(dirname "${default_eeprom}")
+	airoha_eeprom="${airoha_eeprom_dir}/${wifi_chip}_${wifi_chip_type}_eeprom.bin"
+
+	tmp_eeprom="/tmp/wifi_${band}_eeprom.bin"
+	if [ -f "${art_eeprom}" ]; then
+		# EEPROM file is generated from ART partition
+		echo "ecnt_wifi_eeprom: ${band} uses art eeprom" >/dev/kmsg
+		mv "${art_eeprom}" "${tmp_eeprom}"
+	elif [ -f "${custom_eeprom}" ]; then
+		# Custom EEPROM file
+		echo "ecnt_wifi_eeprom: ${band} uses custom eeprom ${custom_eeprom}" >/dev/kmsg
+		cp "${custom_eeprom}" "${tmp_eeprom}"
+	elif [ -f "${airoha_eeprom}" ]; then
+		# Default Airoha EEPROM file
+		echo "ecnt_wifi_eeprom: ${band} uses airoha eeprom ${airoha_eeprom}" >/dev/kmsg
+		cp "${airoha_eeprom}" "${tmp_eeprom}"
+	else
+		# Default EEPROM file
+		echo "ecnt_wifi_eeprom: ${band} uses default eeprom ${default_eeprom}" >/dev/kmsg
+		cp "${default_eeprom}" "${tmp_eeprom}"
+	fi
+	update_macaddr_in_eeprom_bin "${tmp_eeprom}" "${macoff}"
+	[ -e "${target_eeprom}" ] || touch "${target_eeprom}"
+	mount -o bind "${tmp_eeprom}" "${target_eeprom}"
+	rm -f "${tmp_eeprom}"
+}
+
+ecnt_detect_wifi_chip() {
+	if lspci | grep -q "14c3:7906"; then
+		echo "mt7916d"
+	elif lspci | grep -q "14c3:7990"; then
+		echo "mt7990"
+	elif lspci | grep -q "14c3:7992"; then
+		echo "mt7992"
+	else
+		wifi_chip_num=$(lspci | grep 7915 | wc -l)
+		if [ $wifi_chip_num -eq 1 ]; then
+			echo "mt7915d"
+		elif [ $wifi_chip_num -eq 2 ]; then
+			echo "mt7915a"
+		else
+			echo "unknown"
+		fi
+	fi
+}
+
+ecnt_wl_eeprom_bin_gen() {
+	eeprom_dir="/lib/firmware/mediatek"
+
+	# deactivate airoha eeprom selection logic
+	rm -f /etc/wifi_chip_type
+	rm -f /etc/band0_calibrated
+	rm -f /etc/band1_calibrated
+
+	wifi_chip=$(ecnt_detect_wifi_chip)
+
+	if [ -f /sbin/ecnt_wl_e2p ]; then
+		/sbin/ecnt_wl_e2p -c ${wifi_chip}
+		sleep 1
+	fi
+
+	case "${wifi_chip}" in
+		mt7915a)
+			# MT7915A two chip solution
+			ecnt_wifi_eeprom_create mt7915a \
+				band0 "/tmp/wifi_2g.bin" \
+				"/rom/${eeprom_dir}/mt7915_eeprom.bin" \
+				"${eeprom_dir}/mt7915_eeprom_2g.bin" \
+				0
+			ecnt_wifi_eeprom_create mt7915a \
+				band1 "/tmp/wifi_5g.bin" \
+				"/rom/${eeprom_dir}/mt7915_eeprom.bin" \
+				"${eeprom_dir}/mt7915_eeprom.bin" \
+				1
+			;;
+		mt7915d)
+			# MT7915D one chip solution (DBDC)
+			ecnt_wifi_eeprom_create mt7915d \
+				band1 "/tmp/wifi_5g.bin" \
+				"/rom/${eeprom_dir}/mt7915_eeprom_dbdc.bin" \
+				"${eeprom_dir}/mt7915_eeprom_dbdc.bin" \
+				0
+			;;
+		mt7916d)
+			# MT7916 one chip solution (DBDC)
+			ecnt_wifi_eeprom_create mt7916d \
+				band1 "/tmp/wifi_5g.bin" \
+				"/rom/${eeprom_dir}/mt7916_eeprom.bin" \
+				"${eeprom_dir}/mt7916_eeprom.bin" \
+				0
+			;;
+		mt7990)
+			update_macaddr_in_profile mt7990
+			;;
+		mt7992)
+			update_macaddr_in_profile mt7992
+			;;
+	esac
+}
+
+boot() {
+	ecnt_wl_eeprom_bin_gen
+}

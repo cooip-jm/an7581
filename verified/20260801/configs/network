@@ -1,0 +1,59 @@
+# OpenWrt network config for AN7581 — 进机前按探针写死，进机后由 netifd 认领
+#
+# ⚠️ 接口创建机制（探针确认）：
+#   真机所有接口由【原厂脚本】创建，OpenWrt 只认领、绝不创建/重建：
+#     - br0       : lan.sh `brctl addbr br0` + IP=192.168.1.1/24 (或 /configs/br0_ip_addr)
+#     - eth0.0~3.0: lan.sh `vlanctl --if-create-name ethX ethX.0`（Airoha 私有 vlanctl，
+#                   `.0` 是 untagged 命名，非标准 8021q；内核无 8021q 也可）
+#     - ecd0/ecd1 : sdk_moudles.sh `ip link add ecd0 type veth peer ecd1`；ecd0 入 br0
+#     - PON 口    : pon/omci/gpon0.ani/veip0/voip0（驱动 netif，只映射角色）
+#       * pon       : XGPON 数据面主口（原厂 smuxctl 建 PPPoE + pppd 拨号）
+#       * gpon0.ani : OMCI 信令通道
+#       * veip0     : VEIP 虚拟以太网接口（TR-069/管理）
+#       * voip0     : VoIP 语音通道
+#
+# => 本文件【不声明 config device type bridge / 8021q / vlanctl 依赖】。
+#   LXC 已验证：netifd 对内核类型为 bridge 的设备会走「删桥重建」路径
+#   （strings: Delete existing bridge named '%s'），在伪拓扑环境更危险；
+#   故 br0 一律当作【已存在的普通 netdev】认领，只用 static lan 配 IP，
+#   成员仍由原厂 lan.sh/vlanctl/brctl 负责，OpenWrt 不接管成员。
+#   （真机如需 netifd 管 bridge 成员，须单独立项：ip-full + 真机 bridge netlink + 不删桥策略）
+
+# LAN: 认领原厂 br0（已存在普通 device），仅配 IP/路由，不建桥不删桥
+config interface 'lan'
+	option device 'br0'
+	option proto 'static'
+	option ipaddr '192.168.1.1'
+	option netmask '255.255.255.0'
+	option ip6assign '60'
+
+# WAN: PON 数据面 — 默认占位（proto none + auto 0），用户按 ISP 经 LuCI 配置 pppoe/dhcp/static
+# 真机模型：pon 口数据面，原厂 smuxctl 建 PPPoE + pppd；OpenWrt 接管后由用户在 LuCI 选择协议
+config interface 'wan'
+	option device 'pon'
+	option proto 'none'
+	option auto '0'
+
+# WAN6: IPv6 占位（用户按 ISP 启用 dhcpv6/pppoe）
+config interface 'wan6'
+	option device 'pon'
+	option proto 'none'
+	option auto '0'
+
+# 环回
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+# PON 相关口角色映射（只读；netifd 不 down/不拆这些口）
+config interface 'ponmisc'
+	option device 'veip0'
+	option proto 'none'
+	option auto '0'
+
+config interface 'ponmisc6'
+	option device 'gpon0.ani'
+	option proto 'none'
+	option auto '0'

@@ -1,0 +1,38 @@
+# AN7581 — 禁止 git 跟踪（口径：2026-08-03）
+# 文档 / 脚本 / 日志 / 探针 / 包 均不入库，防止仓库被大文件与草稿污染。
+*.md
+*.sh
+*.txt
+*.log
+*.tar.gz
+*.zip
+*.enc
+
+# 敏感凭据/私钥：dropbear host key、TLS key、认证文件
+*host_key
+*.key
+*.pem
+*.crt
+passwd
+shadow
+
+# 真机取证/大备份（仅归档索引 README 入 git，内容排除）
+_archive/ref/
+_archive/packages/
+_archive/probes/
+_archive/snapshots/
+
+# 历史瘦树/空壳与临时产物
+back_an_7581_40md/
+analysis/rootfs_mtd3/
+analysis/real_configs/
+analysis/real_data/
+analysis/real_etc/
+
+# 符号链接（指向 _archive 归档处，不跟踪）
+analysis/real_configs
+analysis/real_data
+analysis/real_etc
+analysis/rootfs_mtd3
+back_an_7581_40md
+verified/20260731

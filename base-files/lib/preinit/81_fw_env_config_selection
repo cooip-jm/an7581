@@ -1,0 +1,10 @@
+move_fw_env_config_mount() {
+	if [ -L /etc/fw_env.config ]; then
+		# Handle keep-settings upgrade from software that uses symlink
+		rm -f /etc/fw_env.config || return
+	fi
+	[ -e /etc/fw_env.config ] || touch /etc/fw_env.config
+	mount -o move /rom/etc/fw_env.config /etc/fw_env.config
+}
+
+[ "$INITRAMFS" = "1" ] || boot_hook_add preinit_main move_fw_env_config_mount

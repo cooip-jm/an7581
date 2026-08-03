@@ -1,0 +1,17 @@
+config global
+	option enabled '1'
+	option pon_mode 'auto'
+	option fec_rx '1'
+	option fec_tx '1'
+	option aes '1'
+	option proc_path '/proc/tc3162'
+
+config omci
+	option enabled '1'
+	option auto_start '1'
+
+config pon_vlan
+	option enabled '0'
+	option mode 'transparent'
+	option vid ''
+	option priority '0'

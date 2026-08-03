@@ -1,0 +1,22 @@
+[ "$ACTION" = ifup ] || exit 0
+
+. /lib/functions/network.sh
+
+network_get_device l3device $INTERFACE
+
+[ "$l3device" == "ae_wan" ] || exit 0
+
+ifconfig ae_wan | grep -q fe80 && exit 0
+
+mac_to_ipv6_ll() {
+	IFS=':'; set $1; unset IFS
+	echo "fe80::$(printf %x $((0x$1 ^ 2)))$2:${3}ff:fe$4:$5$6" |
+	sed -E 's/:0+/:/g; s/:{3,}/::/; s/:$/:0/'
+}
+
+ae_wan_macaddr=$(ifconfig ae_wan | grep HWaddr | awk '{print$NF}')
+ae_wan_ll_ipv6=$(mac_to_ipv6_ll $ae_wan_macaddr)
+
+ip -6 addr flush dev ae_wan
+ip -6 addr add $ae_wan_ll_ipv6 dev ae_wan
+

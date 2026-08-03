@@ -1,0 +1,3 @@
+# Partitions on eMMC
+/dev/mmcblk0p1             0x0             0x1f000         0x1f000
+/dev/mmcblk0p2             0x0             0x1f000         0x1f000

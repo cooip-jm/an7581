@@ -1,0 +1,16 @@
+#!/bin/sh
+# 模拟真机 /sbin/bob ddm 输出（探针 §7 实测）
+if [ "$1" = "ddm" ]; then
+  cat <<'EOF'
+en7572 ddm info:
+temperature:50.9 'C
+Vcc:3.30 V
+txBias:0.00 mA
+txMod:0.00 mA
+txPower:0.10 uW  -40.0 dBm
+rxPower:0.10 uW  -40.0 dBm
+EOF
+  exit 0
+fi
+echo "usage"
+exit 255

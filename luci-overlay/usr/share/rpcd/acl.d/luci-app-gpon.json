@@ -1,0 +1,22 @@
+{
+	"luci-app-gpon": {
+		"description": "Grant access to PON Management",
+		"read": {
+			"file": {
+				"/usr/libexec/pon_helpers.sh": [ "read" ],
+				"/usr/libexec/pon_apply_uci.sh": [ "read" ],
+				"/proc/tc3162/*": [ "read" ]
+			},
+			"ubus": {
+				"file": [ "list", "read", "exec" ]
+			},
+			"uci": [ "pon", "pon_auth", "network" ]
+		},
+		"write": {
+			"uci": [ "pon", "pon_auth" ],
+			"ubus": {
+				"file": [ "exec" ]
+			}
+		}
+	}
+}

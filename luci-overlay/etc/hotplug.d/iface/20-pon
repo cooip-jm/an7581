@@ -1,0 +1,20 @@
+#!/bin/sh
+# Hotplug handler for PON interface events
+# Re-applies UCI xpon.ani config when PON link comes up
+
+interface="$INTERFACE"
+action="$ACTION"
+
+[ "$interface" = "pon" ] || exit 0
+
+case "$action" in
+    ifup)
+        logger -t pon-hotplug "PON interface up, applying config"
+        [ -f /usr/libexec/pon_apply_uci.sh ] && {
+            /usr/libexec/pon_apply_uci.sh &
+        }
+        ;;
+    ifdown)
+        logger -t pon-hotplug "PON interface down"
+        ;;
+esac

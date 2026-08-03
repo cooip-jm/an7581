@@ -1,0 +1,17 @@
+#!/bin/sh
+# CGI: PON 状态采集入口
+# 每次请求触发 pon_status_collect.sh，返回 JSON。
+# 白名单由采集脚本内部控制；本入口不接受任何外部参数。
+
+echo "Content-Type: application/json"
+echo "Cache-Control: no-store"
+echo ""
+
+COLLECT=/usr/libexec/pon_status_collect.sh
+[ -x "$COLLECT" ] || COLLECT=/sbin/pon_status_collect.sh
+
+if [ -x "$COLLECT" ]; then
+	"$COLLECT" - 2>/dev/null
+else
+	echo '{"ok":0,"ts":"unknown","error":"collector not found"}'
+fi

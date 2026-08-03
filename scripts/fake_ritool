@@ -1,0 +1,11 @@
+#!/bin/sh
+# 模拟真机 ritool dump（探针 §8 实测字段）
+cat <<'EOF'
+the Format:00
+the MfrID:HWTC
+the HardwareVersion:3TN00294ABBB
+the Mnemonic:XG-040G-MD
+the BoardID:XG040GMC2P5G
+Platform[5be] Uplink[XGPON1] Type[HGU] EthPorts[4]
+EOF
+exit 255

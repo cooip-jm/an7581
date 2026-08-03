@@ -1,0 +1,14 @@
+config rpcd 'main'
+	option socket '/var/run/ubus/ubus.sock'
+	option timeout '30'
+
+config login 'admin'
+	option username 'root'
+	option password '$1$NlbhLNmH$hkRk3rwrAqrPjOjmJ2kV9/'
+
+config server 'luci'
+	option handler 'luci'
+	option user 'root'
+
+config 'include'
+	option 'path' '/usr/share/rpcd/acl.d/*.json'

@@ -1,0 +1,11 @@
+{
+        "size" : 16,
+        "autofill": true,
+        "wireless": false,
+        "config": [
+                "network.lan",
+                "network.wan network.wan6",
+                "_WLAN0_",
+                "_WLAN1_"
+        ]
+}

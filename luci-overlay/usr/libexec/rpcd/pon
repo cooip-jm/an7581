@@ -1,0 +1,26 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+read input
+json_load "$input"
+case "$1" in
+    apply)
+        /usr/libexec/pon_apply_uci.sh 2>&1
+        json_init
+        json_add_int code 0
+        json_add_string stdout "Configuration applied"
+        json_dump
+        ;;
+    get_status)
+        result=$(/sbin/ponmgr gpon get status 2>&1)
+        json_init
+        json_add_int code 0
+        json_add_string stdout "$result"
+        json_dump
+        ;;
+    *)
+        json_init
+        json_add_int code 1
+        json_add_string error "Unknown method"
+        json_dump
+        ;;
+esac

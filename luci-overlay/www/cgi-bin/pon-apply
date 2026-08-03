@@ -1,0 +1,46 @@
+#!/bin/sh
+# CGI endpoint for PON config apply/status
+# Called by LuCI JS views via fetch()
+# Reads proc_path from UCI config for portability
+
+. /usr/share/libubox/jshn.sh 2>/dev/null
+
+ACTION="${1:-${QUERY_STRING:-status}}"
+
+# 输出 HTTP 头
+echo "Content-Type: application/json"
+echo ""
+
+case "$ACTION" in
+    apply)
+        /usr/libexec/pon_apply_uci.sh >/dev/null 2>&1
+        RC=$?
+        if [ "$RC" -eq 0 ]; then
+            json_init
+            json_add_int code 0
+            json_add_string message "Configuration applied"
+            json_dump
+        else
+            json_init
+            json_add_int code 1
+            json_add_string message "Failed to apply configuration (exit $RC)"
+            json_dump
+        fi
+        ;;
+    status)
+        PROC_DIR="$(uci -q get pon.@global[0].proc_path 2>/dev/null)"
+        [ -z "$PROC_DIR" ] && PROC_DIR="/proc/tc3162"
+        STATUS="$(cat "$PROC_DIR/omci_state" 2>/dev/null || echo "N/A")"
+        # jshn 的 json_add_string 会自动处理转义, 不需要手动 json_escape
+        json_init
+        json_add_int code 0
+        json_add_string omci_state "$STATUS"
+        json_dump
+        ;;
+    *)
+        json_init
+        json_add_int code 1
+        json_add_string error "Unknown action"
+        json_dump
+        ;;
+esac
